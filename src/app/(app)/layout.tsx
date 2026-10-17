@@ -18,6 +18,8 @@ import { C2ToastRegion } from '@/components/ui/C2Toast'
 import { useAuthSession } from '@/hooks/useAuthSession'
 import { ActivityCentreBell } from '@/components/ActivityCentre'
 import { useActivityCachePersistence } from '@/hooks/useActivityCachePersistence'
+import { useActivityFeed } from '@/hooks/useActivityFeed'
+import { useActivityOutboxFlush } from '@/hooks/useActivityOutboxFlush'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router      = useRouter()
@@ -36,6 +38,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useNotifications(context !== null)
   usePushNotifications()
   useActivityCachePersistence()
+  useActivityFeed(context)
+  useActivityOutboxFlush(context)
 
   const handleScroll = useCallback(() => {
     setScrolling(true)
