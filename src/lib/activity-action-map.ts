@@ -21,8 +21,10 @@ const entry = (key: Key, entity: ActivityEntityType, action: ActivityActionType)
 export const ACTIVITY_ACTIONS: Record<string, Spec> = {
   addEvent: entry('events','event','created'), updateEvent: entry('events','event','updated'),
   deleteEvent: entry('events','event','deleted'),
+  uploadEventPhoto: entry('events','event','updated'),
   addTodo: entry('todos','todo','created'), updateTodo: entry('todos','todo','updated'),
   toggleTodo: entry('todos','todo','completed'), deleteTodo: entry('todos','todo','deleted'),
+  uploadTodoPhoto: entry('todos','todo','updated'),
   setMood: entry('moods','mood','shared'),
   addLoveNote: entry('loveNotes','loveNote','sent'),
   deleteLoveNote: entry('loveNotes','loveNote','deleted'),
@@ -31,6 +33,7 @@ export const ACTIVITY_ACTIONS: Record<string, Spec> = {
   updateWishlistItem: entry('wishlistItems','wish','updated'),
   toggleWishlistItem: entry('wishlistItems','wish','achieved'),
   deleteWishlistItem: entry('wishlistItems','wish','deleted'),
+  uploadWishlistPhoto: entry('wishlistItems','wish','updated'),
   addCountdown: entry('countdowns','countdown','created'),
   updateCountdown: entry('countdowns','countdown','updated'),
   deleteCountdown: entry('countdowns','countdown','deleted'),
@@ -65,6 +68,7 @@ export const ACTIVITY_ACTIONS: Record<string, Spec> = {
   updateFocusActivity: entry('focusActivities','focus','updated'),
   toggleFocusActivity: entry('focusActivities','focus','completed'),
   deleteFocusActivity: entry('focusActivities','focus','deleted'),
+  uploadFocusActivityPhoto: entry('focusActivities','focus','updated'),
   setFocusCarryOver: entry('focusCarryOver','focus','updated'),
   carryOverToWeek: entry('focusActivities','focus','updated'),
   incrementBoomBoom: entry('boomBoomCount','countdown','updated'),
@@ -125,15 +129,18 @@ export function wrapActivityActions<T extends {currentUser: UserName|null}>(init
       if (!context || context.userName !== get().currentUser) return original(...args)
       const before = get() as Record<string, unknown>
       const result = original(...args)
-      if (!isCurrentAuth(context) || get().currentUser !== context.userName) return result
-      const change = describeActivityChange(name, before, get() as Record<string, unknown>)
-      if (change) {
+      const capture = () => {
+        if (!isCurrentAuth(context) || get().currentUser !== context.userName) return
+        const change = describeActivityChange(name, before, get() as Record<string, unknown>)
+        if (!change) return
         const event = createActivityEvent({actor: context.userName, ...change})
-        if (event) {
-          enqueueActivityEvent(context.userName, event)
-          if (typeof window !== 'undefined') window.dispatchEvent(new Event('sema:activity-queued'))
-        }
+        if (event) enqueueActivityEvent(context.userName, event)
       }
+      // Photo uploads mutate the store after awaiting Storage; emit only on success.
+      if (result && typeof (result as Promise<unknown>).then === 'function') {
+        return (result as Promise<unknown>).then(value => { capture(); return value })
+      }
+      capture()
       return result
     }
   }
