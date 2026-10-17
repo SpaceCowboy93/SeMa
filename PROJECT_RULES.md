@@ -21,6 +21,11 @@ Read this file at the start of every new feature session.
 
 ## Development Workflow
 
+- In the isolated `SpaceCowboy93/SeMa` repository, use Supabase V2
+  `wwxdinkdjkjiqzynfbdk` and the `preview/supabase-v2-isolated` branch only.
+  Cache generation 2 is the clean-start boundary; never migrate earlier caches.
+  Release to the dedicated V2 Preview only. Preserve `main` and Production.
+
 - **Never commit, push, or deploy** unless the user explicitly says "Deploy".
 - Always work locally first. Local → TypeScript check → build → then deploy.
 - Run `npx tsc --noEmit` and `npm run build` before every deployment.
