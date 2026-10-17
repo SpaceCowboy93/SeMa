@@ -93,46 +93,46 @@ type CatalogueKey = `${ActivityEntityType}:${ActivityActionType}`
 const ACTIVITY_CATALOGUE: Partial<Record<CatalogueKey, CatalogueEntry>> = {
   'event:created':      { importance: 'immediate', deepLink: '/together' },
   'event:deleted':      { importance: 'immediate', deepLink: '/together' },
-  'event:updated':      { importance: 'feed_only', deepLink: '/calendar' },
+  'event:updated':      { importance: 'immediate', deepLink: '/calendar' },
 
   'todo:created':       { importance: 'immediate', deepLink: '/planner' },
   'todo:completed':     { importance: 'immediate', deepLink: '/planner' },
-  'todo:updated':       { importance: 'feed_only', deepLink: '/todos' },
+  'todo:updated':       { importance: 'immediate', deepLink: '/todos' },
 
   'goal:created':       { importance: 'immediate', deepLink: '/goals' },
   'goal:achieved':      { importance: 'immediate', deepLink: '/goals' },
-  'goal:updated':       { importance: 'feed_only', deepLink: '/goals' },
-  'goal:deleted':       { importance: 'feed_only', deepLink: '/goals' },
+  'goal:updated':       { importance: 'immediate', deepLink: '/goals' },
+  'goal:deleted':       { importance: 'immediate', deepLink: '/goals' },
 
   'wish:created':       { importance: 'immediate', deepLink: '/wishlist' },
   'wish:achieved':      { importance: 'immediate', deepLink: '/wishlist' },
-  'wish:updated':       { importance: 'feed_only', deepLink: '/wishlist' },
+  'wish:updated':       { importance: 'immediate', deepLink: '/wishlist' },
 
   'shopping:completed': { importance: 'immediate', deepLink: '/shopping' },
   'shopping:added':     { importance: 'grouped',   deepLink: '/shopping' },
   'shopping:created':   { importance: 'immediate', deepLink: '/shopping' },
-  'shopping:updated':   { importance: 'feed_only', deepLink: '/shopping' },
-  'shopping:deleted':   { importance: 'feed_only', deepLink: '/shopping' },
+  'shopping:updated':   { importance: 'immediate', deepLink: '/shopping' },
+  'shopping:deleted':   { importance: 'immediate', deepLink: '/shopping' },
 
   'mood:shared':        { importance: 'immediate', deepLink: '/us' },
 
   'memory:created':     { importance: 'immediate', deepLink: '/memories' },
-  'memory:updated':     { importance: 'feed_only', deepLink: '/memories' },
+  'memory:updated':     { importance: 'immediate', deepLink: '/memories' },
 
   'loveNote:sent':      { importance: 'immediate', deepLink: '/together' },
 
   'partnerNote:sent':   { importance: 'immediate', deepLink: '/together', sensitive: true },
 
   'countdown:created':  { importance: 'immediate', deepLink: '/us' },
-  'countdown:updated':  { importance: 'feed_only', deepLink: '/us' },
+  'countdown:updated':  { importance: 'immediate', deepLink: '/us' },
 
-  'finance:created':    { importance: 'feed_only', deepLink: '/plans', sensitive: true },
-  'finance:updated':    { importance: 'feed_only', deepLink: '/plans', sensitive: true },
+  'finance:created':    { importance: 'immediate', deepLink: '/plans', sensitive: true },
+  'finance:updated':    { importance: 'immediate', deepLink: '/plans', sensitive: true },
   'finance:added':      { importance: 'grouped',   deepLink: '/plans', sensitive: true },
 
-  'focus:created':      { importance: 'feed_only', deepLink: '/planner' },
-  'focus:completed':    { importance: 'feed_only', deepLink: '/planner' },
-  'focus:updated':      { importance: 'feed_only', deepLink: '/planner' },
+  'focus:created':      { importance: 'immediate', deepLink: '/planner' },
+  'focus:completed':    { importance: 'immediate', deepLink: '/planner' },
+  'focus:updated':      { importance: 'immediate', deepLink: '/planner' },
 }
 
 function getCatalogueEntry(
@@ -140,7 +140,7 @@ function getCatalogueEntry(
   actionType: ActivityActionType,
 ): CatalogueEntry {
   const key: CatalogueKey = `${entityType}:${actionType}`
-  return ACTIVITY_CATALOGUE[key] ?? { importance: 'feed_only', deepLink: '/together' }
+  return ACTIVITY_CATALOGUE[key] ?? { importance: 'immediate', deepLink: '/together' }
 }
 
 // ── Core types ────────────────────────────────────────────────────────────────
@@ -272,7 +272,7 @@ export function buildIdempotencyKey(
   entityId: string,
   nowMs = Date.now(),
 ): string {
-  // Round to nearest minute bucket
+  // Bucket rapid repeated edits within one minute to limit duplicate alerts
   const minuteBucket = Math.floor(nowMs / 60_000)
   return `${entityType}:${actionType}:${entityId}:${actor}:${minuteBucket}`
 }
