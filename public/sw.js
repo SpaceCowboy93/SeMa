@@ -38,13 +38,17 @@ self.addEventListener('push', event => {
 
 self.addEventListener('notificationclick', event => {
   event.notification.close()
-  const url = event.notification.data?.url ?? '/'
+  const raw = event.notification.data?.url ?? '/together'
+  // Only navigate within this application; never trust push payload URLs.
+  const url = typeof raw === 'string' && /^\/(?!\/)[a-zA-Z0-9/-]*$/.test(raw) ? raw : '/together'
   event.waitUntil(
     clients
       .matchAll({ type: 'window', includeUncontrolled: true })
       .then(list => {
         for (const c of list) {
-          if (c.url.includes(self.location.origin) && 'focus' in c) return c.focus()
+          if (c.url.startsWith(self.location.origin) && 'focus' in c) {
+            return c.focus().then(() => c.navigate?.(new URL(url,self.location.origin).href) ?? c)
+          }
         }
         return clients.openWindow(url)
       })
