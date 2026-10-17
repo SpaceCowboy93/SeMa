@@ -7,8 +7,8 @@
  * Seval's, and vice versa.
  *
  * Keys:
- *   semacalendar-activity-feed-v1:{userId}   — ActivityEntry[]
- *   semacalendar-notif-prefs-v1:{userId}      — NotificationPreferences
+ *   semacalendar-activity-feed-v2:{userId}   — ActivityEntry[]
+ *   semacalendar-notif-prefs-v2:{userId}      — NotificationPreferences
  */
 
 import type { ActivityEntry } from './activity-event'
@@ -26,8 +26,8 @@ const MAX_FEED_ENTRIES = 50
 
 // ── Key helpers ───────────────────────────────────────────────────────────────
 
-function feedKey(userId: UserName)  { return `semacalendar-activity-feed-v1:${userId}` }
-function prefsKey(userId: UserName) { return `semacalendar-notif-prefs-v1:${userId}` }
+function feedKey(userId: UserName)  { return `semacalendar-activity-feed-v2:${userId}` }
+function prefsKey(userId: UserName) { return `semacalendar-notif-prefs-v2:${userId}` }
 
 // ── Activity feed ─────────────────────────────────────────────────────────────
 
