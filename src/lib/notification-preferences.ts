@@ -45,10 +45,6 @@ export interface NotificationPreferences {
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
-const FEED_ONLY_CATEGORIES: ActivityEntityType[] = [
-  'todo', 'goal', 'focus', 'finance', 'countdown',
-]
-
 function buildDefaultCategories(): CategoryPreferences {
   const all: ActivityEntityType[] = [
     'event', 'todo', 'goal', 'wish', 'shopping', 'mood',
@@ -60,7 +56,7 @@ function buildDefaultCategories(): CategoryPreferences {
       feedEnabled: true,
       // Push enabled for high-value categories by default; feed-only categories
       // require the user to opt in to phone interruptions.
-      pushEnabled: !FEED_ONLY_CATEGORIES.includes(cat),
+      pushEnabled: true,
     }
   }
   return prefs
