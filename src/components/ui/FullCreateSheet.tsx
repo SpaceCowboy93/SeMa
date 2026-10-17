@@ -409,7 +409,7 @@ export function FullCreateSheet({ open, onClose, primary, initialDate, initialTy
                           autoFocus
                           enterKeyHint="next"
                           className="w-full text-xl font-semibold text-gray-800 placeholder:text-gray-300
-                                     border-b-2 border-gray-100 focus:border-gray-200 pb-3 outline-none
+                                     border-b-2 border-gray-100 focus:border-gray-200 text-center py-3 outline-none
                                      transition-colors bg-transparent rounded-none focus-visible:shadow-none"
                         />
                       )}
