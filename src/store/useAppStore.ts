@@ -40,6 +40,7 @@ const DEFAULT_BUDGET_ITEMS: BudgetItem[] = [
 import { generateId, getTodayString } from '@/lib/utils'
 import { getAuthContext, getAuthGeneration, isCurrentAuth } from '@/lib/auth-session'
 import { toast } from '@/store/useToastStore'
+import { wrapActivityActions } from '@/lib/activity-action-map'
 
 function updateRecords<T extends { id: string }>(records: T[], id: string, update: (record: T) => T): T[] {
   const next = records.map(record => {
@@ -328,7 +329,7 @@ function applyShoppingFinanceSync(
 
 export const useAppStore = create<AppState>()(
   persist<AppState, [], [], Partial<SharedState>>(
-    (set, get) => ({
+    (set, get) => wrapActivityActions({
       // ── Session ─────────────────────────────────────────────────────────────
       currentUser: null,
       setCurrentUser: (user) => set({ currentUser: user }),
