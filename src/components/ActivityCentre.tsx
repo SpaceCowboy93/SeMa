@@ -33,6 +33,7 @@ import { useAppStore } from '@/store/useAppStore'
 import { ENTITY_COLOURS, type ActivityEntityType } from '@/lib/activity-event'
 import type { NotificationPreferences } from '@/lib/notification-preferences'
 import { cn } from '@/lib/utils'
+import { authenticatedFetch } from '@/lib/authenticated-fetch'
 
 // ── Colour chips ──────────────────────────────────────────────────────────────
 
@@ -338,6 +339,21 @@ export function ActivityCentreSheet({ open, onClose }: ActivityCentreSheetProps)
   const [prefsOpen, setPrefsOpen] = useState(false)
 
   const unreadCount = entries.filter(e => !e.isRead).length
+  const saveRead = useCallback((id: string) => {
+    markRead(id)
+    void authenticatedFetch('/api/activity', {method:'PATCH',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({id})}).catch(() => {})
+  }, [markRead])
+  const saveAllRead = useCallback(() => {
+    markAllRead()
+    void authenticatedFetch('/api/activity', {method:'PATCH',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({all:true})}).catch(() => {})
+  }, [markAllRead])
+  const removeRead = useCallback(() => {
+    clearRead()
+    void authenticatedFetch('/api/activity', {method:'DELETE'}).catch(() => {})
+  }, [clearRead])
+
 
   const handleNavigate = useCallback((path: string) => {
     onClose()
@@ -397,7 +413,7 @@ export function ActivityCentreSheet({ open, onClose }: ActivityCentreSheetProps)
                 <ActivityFeedItem
                   key={entry.id}
                   {...entry}
-                  onRead={markRead}
+                  onRead={saveRead}
                   onNavigate={handleNavigate}
                 />
               ))}
@@ -411,7 +427,7 @@ export function ActivityCentreSheet({ open, onClose }: ActivityCentreSheetProps)
               {unreadCount > 0 && (
                 <button
                   type="button"
-                  onClick={markAllRead}
+                  onClick={saveAllRead}
                   className="flex-1 text-xs font-medium text-teal-600 py-2
                              rounded-lg bg-teal-50 active:bg-teal-100 transition-colors"
                 >
@@ -420,7 +436,7 @@ export function ActivityCentreSheet({ open, onClose }: ActivityCentreSheetProps)
               )}
               <button
                 type="button"
-                onClick={clearRead}
+                onClick={removeRead}
                 className="flex-1 text-xs font-medium text-gray-500 py-2
                            rounded-lg bg-gray-50 active:bg-gray-100 transition-colors"
               >
