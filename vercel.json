@@ -1,3 +1,3 @@
 {
-  "buildCommand": "npm run test -- --reporter=json --outputFile=public/sema-qa-report.json; npm run build"
+  "buildCommand": "npm run quality"
 }
