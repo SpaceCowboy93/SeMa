@@ -73,7 +73,7 @@ function validateOutboxEntry(entry: unknown): entry is ActivityOutboxEntry {
 // ── Persistence ───────────────────────────────────────────────────────────────
 
 function outboxKey(userId: UserName): string {
-  return `semacalendar-activity-outbox-v1:${userId}`
+  return `semacalendar-activity-outbox-v2:${userId}`
 }
 
 export function loadOutbox(userId: UserName): ActivityOutboxEntry[] {
