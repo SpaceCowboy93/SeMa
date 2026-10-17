@@ -115,10 +115,10 @@ describe('shouldSendPush', () => {
     expect(shouldSendPush(prefs, 'loveNote', 'immediate', 10)).toBe(true)
   })
 
-  it('defaults to no push for feed-only categories (finance, todo)', () => {
-    // finance and todo are FEED_ONLY_CATEGORIES — push is false by default
-    expect(DEFAULT_NOTIFICATION_PREFERENCES.categories.finance.pushEnabled).toBe(false)
-    expect(DEFAULT_NOTIFICATION_PREFERENCES.categories.todo.pushEnabled).toBe(false)
+  it('enables push for all shared-change categories by default', () => {
+    // The receiving partner can switch either category off in preferences.
+    expect(DEFAULT_NOTIFICATION_PREFERENCES.categories.finance.pushEnabled).toBe(true)
+    expect(DEFAULT_NOTIFICATION_PREFERENCES.categories.todo.pushEnabled).toBe(true)
   })
 
   it('defaults to push enabled for high-value categories (loveNote, wish)', () => {
@@ -190,10 +190,10 @@ describe('DEFAULT_NOTIFICATION_PREFERENCES', () => {
     expect(categories.every(c => c.feedEnabled)).toBe(true)
   })
 
-  it('has push enabled only for non-feed-only categories', () => {
+  it('has push enabled for all categories unless switched off', () => {
     const feedOnlyCats = ['todo', 'goal', 'focus', 'finance', 'countdown'] as const
     for (const cat of feedOnlyCats) {
-      expect(DEFAULT_NOTIFICATION_PREFERENCES.categories[cat].pushEnabled).toBe(false)
+      expect(DEFAULT_NOTIFICATION_PREFERENCES.categories[cat].pushEnabled).toBe(true)
     }
   })
 })
