@@ -14,14 +14,14 @@ function describe(value: unknown): string {
 }
 function label(path: string) {
   if (path.startsWith('todos.') || path.startsWith('checklistItems.')) return 'Checklist'
-  return ({ title: 'Title', notes: 'Notes', date: 'Date', targetDate: 'Date', startTime: 'Start time', endTime: 'End time',
-    todos: 'Checklist', checklistItems: 'Checklist', photos: 'Photos', backgroundPhoto: 'Background photo', record: 'Item', link: 'Linked item' } as Record<string, string>)[path] ?? 'Field'
+  return ({ destination: 'Destination', country: 'Country', startDate: 'Start date', endDate: 'End date', travellers: 'Travellers', status: 'Status', budget: 'Budget', currency: 'Currency', description: 'Description', location: 'Location', link: 'Link', estimatedCost: 'Estimated spending', actualCost: 'Actual spending', content: 'Note', title: 'Title', notes: 'Notes', date: 'Date', targetDate: 'Date', startTime: 'Start time', endTime: 'End time',
+    todos: 'Checklist', checklistItems: 'Checklist', photos: 'Photos', backgroundPhoto: 'Background photo', record: 'Item' } as Record<string, string>)[path] ?? 'Field'
 }
-export function DraftConflictNotice({ conflicts, onResolve }: {
-  conflicts: DraftConflict[]; onResolve: (choice: DraftChoice) => void
+export function DraftConflictNotice({ conflicts, onResolve, blockedPaths = ['record', 'link'] }: {
+  conflicts: DraftConflict[]; onResolve: (choice: DraftChoice) => void; blockedPaths?: string[]
 }) {
   if (!conflicts.length) return null
-  const blocked = conflicts.some(conflict => conflict.path === 'record' || conflict.path === 'link')
+  const blocked = conflicts.some(conflict => blockedPaths.includes(conflict.path))
   return (
     <div role="alert" className="my-3 max-h-64 overflow-y-auto break-words rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
       <p>{blocked ? 'This item was removed or relinked. Your draft is still open. Close and reopen to edit the current version.'

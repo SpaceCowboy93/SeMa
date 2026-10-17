@@ -3,7 +3,7 @@
 import { resolveBackgroundConflict, useSyncConflicts } from '@/hooks/useSupabaseSync'
 import type { SyncConflictGroup } from '@/lib/sync-merge'
 
-const names: Record<string, string> = { events: 'Calendar', goals: 'Dreams', todos: 'To-Dos', moods: 'Moods',
+const names: Record<string, string> = { trips: 'Trips', plans: 'Itinerary', packing: 'Packing', bookings: 'Bookings', events: 'Calendar', goals: 'Dreams', todos: 'To-Dos', moods: 'Moods',
   monthlyIncome: 'Monthly income', boomBoomCount: 'Count', checklistItems: 'Checklist', isCompleted: 'Done', todosField: 'Checklist' }
 const name = (field: string) => names[field] ?? field.replace(/([a-z])([A-Z])/g, '$1 $2')
 function version(value: unknown): string {

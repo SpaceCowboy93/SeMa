@@ -9,6 +9,7 @@ import * as cache from '@/lib/durable-cache'
 import * as idb from '@/lib/indexed-checkpoint'
 import { checkpointChecksum, writeRecoveryCheckpoint, type RecoveryCheckpoint } from '@/lib/sync-checkpoint'
 import type { CalendarEvent } from '@/types'
+import { newTrip } from '@/lib/trips'
 
 vi.unmock('@/lib/durable-cache')
 const mocks = vi.hoisted(() => ({ read: vi.fn(), mutate: vi.fn(), apply: vi.fn() }))
@@ -38,14 +39,14 @@ const event = (id: string): CalendarEvent => ({ id, title: id, date: '2027-01-01
 const access = { userId: 'synthetic-v2-user', userName: 'mateo' as const, coupleId: '', stateId: 'sema' }
 let oldRoot: string, newRoot: string, server: Record<string, unknown>, version: string
 const network = vi.fn(() => { throw new Error('Live network prohibited') })
-const oldData = (): RecoveryCheckpoint => ({ state: { events: [event('old-project-event')], monthlyIncome: 9999 },
-  base: { events: [], monthlyIncome: 0 }, pending: ['events', 'monthlyIncome'], archives: [] })
+const oldData = (): RecoveryCheckpoint => ({ state: { events: [event('old-project-event')], monthlyIncome: 9999, trips: [newTrip({ title: 'Deleted trip', destination: '', country: '', travellers: ['mateo', 'seval'], status: 'idea', budget: 0, currency: 'EUR', notes: '' }, 'mateo')] },
+  base: { events: [], monthlyIncome: 0, trips: [] }, pending: ['events', 'monthlyIncome', 'trips'], archives: [] })
 
 beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', `https://${project}.supabase.co`)
   access.coupleId = 'v2-migration-' + crypto.randomUUID()
   oldRoot = `semacalendar-v2:${access.coupleId}:sema`
-  newRoot = `semacalendar-v2:project:${project}:${access.coupleId}:sema`
+  newRoot = `semacalendar-v2:project:${project}:generation:2:${access.coupleId}:sema`
   invalidateAuth(); clearActiveCouple(); localStorage.clear()
   vi.stubGlobal('indexedDB', new IDBFactory())
   for (const transport of ['fetch', 'WebSocket', 'XMLHttpRequest']) vi.stubGlobal(transport, network)
@@ -74,23 +75,24 @@ async function start() {
 }
 const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 1000)) })
 
-it.each(['ownerless-v1', 'owned-v1', 'scoped-cache', 'scoped-journal', 'indexed-checkpoint'])(
+it.each(['ownerless-v1', 'owned-v1', 'scoped-cache', 'scoped-journal', 'indexed-checkpoint', 'previous-v2-cache', 'previous-v2-journal', 'previous-v2-indexed'])(
   'never hydrates or uploads %s from the old project, even with matching household IDs', async source => {
     const data = oldData()
+    const sourceRoot = source.startsWith('previous-v2') ? `semacalendar-v2:project:${project}:${access.coupleId}:sema` : oldRoot
     if (source.endsWith('v1')) {
       localStorage.setItem('semacalendar-v1', JSON.stringify({ state: data.state, version: 0 }))
       if (source === 'owned-v1') localStorage.setItem('sema-legacy-cache-owner', access.coupleId)
-    } else if (source === 'indexed-checkpoint') {
-      await idb.writeIndexedCheckpoint(oldRoot, null, data, checkpointChecksum('[]'), access.coupleId)
+    } else if (source === 'indexed-checkpoint' || source === 'previous-v2-indexed') {
+      await idb.writeIndexedCheckpoint(sourceRoot, null, data, checkpointChecksum('[]'), access.coupleId)
     } else {
-      localStorage.setItem(oldRoot, JSON.stringify({ state: data.state, version: 0 }))
-      localStorage.setItem(oldRoot + ':base', JSON.stringify(data.base))
-      localStorage.setItem(oldRoot + ':pending', JSON.stringify(data.pending))
-      if (source === 'scoped-journal') writeRecoveryCheckpoint(oldRoot, data, {
+      localStorage.setItem(sourceRoot, JSON.stringify({ state: data.state, version: 0 }))
+      localStorage.setItem(sourceRoot + ':base', JSON.stringify(data.base))
+      localStorage.setItem(sourceRoot + ':pending', JSON.stringify(data.pending))
+      if (source === 'scoped-journal' || source === 'previous-v2-journal') writeRecoveryCheckpoint(sourceRoot, data, {
         read: key => localStorage.getItem(key), write: (key, value) => { localStorage.setItem(key, value); return true },
       }, () => true)
     }
-    const originalStorage = { ...localStorage }, originalRecord = await idb.readIndexedCheckpoint(oldRoot)
+    const originalStorage = { ...localStorage }, originalRecord = await idb.readIndexedCheckpoint(sourceRoot)
     // Exercise the compatibility adapter too; neither hydration nor dirty-field
     // inference may pull in a legacy cache on the V2 backend.
     localCache.setCacheScope(access)
@@ -99,13 +101,14 @@ it.each(['ownerless-v1', 'owned-v1', 'scoped-cache', 'scoped-journal', 'indexed-
     await loadCoupleCache(access)
     expect(useAppStore.getState().events).toEqual([])
     expect(useAppStore.getState().monthlyIncome).toBe(0)
+    expect(useAppStore.getState().trips).toEqual([])
     expect(cache.pendingKeys(access).size).toBe(0)
     const before = structuredClone(server), hook = await start()
     await settle()
     expect(server).toEqual(before)
     expect(mocks.mutate).not.toHaveBeenCalled()
     expect({ ...localStorage }).toEqual(originalStorage)
-    expect(await idb.readIndexedCheckpoint(oldRoot)).toEqual(originalRecord)
+    expect(await idb.readIndexedCheckpoint(sourceRoot)).toEqual(originalRecord)
     expect(await idb.readIndexedCheckpoint(newRoot)).not.toBeNull()
     hook.unmount()
   })

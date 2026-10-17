@@ -37,6 +37,7 @@ import {
   Plus,
 } from '@/design/iconSystem'
 import { cn } from '@/lib/utils'
+import { Plane } from 'lucide-react'
 import { PartnerNoteNotification } from '@/components/PartnerNoteNotification'
 import { GlobalImageLightbox } from '@/components/ui/GlobalImageLightbox'
 import { C2ToastRegion } from '@/components/ui/C2Toast'
@@ -51,6 +52,7 @@ const PREVIEW_NAV = [
   { href: '/dev-preview/planner',   label: 'Planner',  Icon: IconNavPlanner  },
   { href: '/dev-preview/plans',     label: 'Finances', Icon: IconNavFinances  },
   { href: '/dev-preview/shopping',  label: 'Shopping', Icon: IconNavShopping  },
+  { href: '/dev-preview/trips', label: 'Trips', Icon: Plane },
   { href: '/dev-preview/us',        label: 'Us',       Icon: IconNavUs        },
 ]
 

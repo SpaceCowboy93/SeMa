@@ -673,6 +673,7 @@ export function getDevPreviewFixtures(
     monthlyIncome: 3500,
     focusCarryOver: false,
     boomBoomCount: 42,
+    trips: [],
     activityEntries: buildActivityEntries(user),
   }
 }

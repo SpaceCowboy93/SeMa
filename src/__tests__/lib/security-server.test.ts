@@ -7,7 +7,7 @@ vi.mock('server-only', () => ({}))
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => mocks }))
 
 beforeEach(() => {
-  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co')
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://wwxdinkdjkjiqzynfbdk.supabase.co')
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'test-key')
   mocks.getUser.mockReset().mockResolvedValue({ data: { user: { id: 'auth-mateo' } }, error: null })
   Object.assign(mocks, { auth: { getUser: mocks.getUser } })

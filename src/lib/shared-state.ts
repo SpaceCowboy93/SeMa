@@ -1,10 +1,11 @@
 import type { AppState } from '@/store/useAppStore'
+import { isValidTrip } from './trips'
 
 export const SHARED_KEYS = [
   'events', 'todos', 'moods', 'loveNotes', 'wishlistItems', 'countdowns', 'memories',
   'goals', 'partnerNotes', 'shoppingLists', 'monthlyIncome', 'budgetItems',
   'savingsGoals', 'financeMonths', 'savingsTransactions', 'focusActivities',
-  'focusCarryOver', 'boomBoomCount',
+  'focusCarryOver', 'boomBoomCount', 'trips',
 ] as const satisfies readonly (keyof AppState)[]
 export type SharedState = Pick<AppState, typeof SHARED_KEYS[number]>
 
@@ -31,6 +32,10 @@ export function selectSharedState(value: unknown): Partial<SharedState> {
     } else if (key === 'focusCarryOver') {
       if (typeof entry === 'boolean') result[key] = entry
     } else if (Array.isArray(entry)) {
+      if (key === 'trips') {
+        if (entry.every(isValidTrip) && new Set(entry.map(trip => trip.id)).size === entry.length) result[key] = entry
+        continue
+      }
       if (key === 'moods') {
         if (entry.every(item => item && typeof item === 'object' && !Array.isArray(item) &&
           (item.userId === 'mateo' || item.userId === 'seval') &&

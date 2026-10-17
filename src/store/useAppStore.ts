@@ -6,6 +6,9 @@ import { coupleStorage, pendingKeys, persistSyncCheckpoint, readSyncBase, setCac
 import { selectSharedState, type SharedState } from '@/lib/shared-state'
 import { sameValue } from '@/lib/sync-merge'
 import { goalChecklist, reconcileChecklist } from '@/lib/dream-checklist'
+import { isValidTrip, newTrip } from '@/lib/trips'
+import { usesSupabaseV2Cache } from '@/lib/shared-cache-scope'
+import type { Trip, TripCollection, TripDetails } from '@/types/trips'
 import type { CoupleAccess } from '@/lib/couple-access'
 import { authenticatedFetch } from '@/lib/authenticated-fetch'
 import {
@@ -51,6 +54,11 @@ function updateRecords<T extends { id: string }>(records: T[], id: string, updat
 }
 
 export interface AppState {
+  trips: Trip[]
+  addTrip: (details: TripDetails) => string
+  updateTrip: (id: string, updates: Partial<Trip>) => void
+  deleteTrip: (id: string) => void
+  moveTripEntry: (id: string, collection: TripCollection, entryId: string, direction: -1 | 1) => void
   // Session
   currentUser: UserName | null
   setCurrentUser: (user: UserName | null) => void
@@ -340,6 +348,28 @@ export const useAppStore = create<AppState>()(
 
       // ── Events ──────────────────────────────────────────────────────────────
       events: [],
+      trips: [],
+      addTrip: details => {
+        const user = get().currentUser
+        if (!user) return ''
+        const trip = newTrip(details, user)
+        set(s => ({ trips: [...s.trips, trip] }))
+        return trip.id
+      },
+      updateTrip: (id, updates) => set(s => ({ trips: updateRecords(s.trips, id, trip => {
+        const next = { ...trip, ...updates, id: trip.id, createdBy: trip.createdBy, createdAt: trip.createdAt, updatedAt: trip.updatedAt }
+        if (!isValidTrip(next)) throw new Error('Check the trip fields, dates, links and amounts.')
+        return sameValue(next, trip) ? trip : { ...next, updatedAt: new Date().toISOString() }
+      }) })),
+      deleteTrip: id => set(s => ({ trips: s.trips.filter(trip => trip.id !== id) })),
+      moveTripEntry: (id, collection, entryId, direction) => {
+        const trip = get().trips.find(t => t.id === id)
+        if (!trip) return
+        const items = [...trip[collection]], from = items.findIndex(item => item.id === entryId), to = from + direction
+        if (from < 0 || to < 0 || to >= items.length) return
+        ;[items[from], items[to]] = [items[to], items[from]]
+        get().updateTrip(id, { [collection]: items })
+      },
 
       addEvent: data => {
         const now = new Date().toISOString()
@@ -966,7 +996,7 @@ export const useAppStore = create<AppState>()(
 
       // ── Finance ──────────────────────────────────────────────────────────────
       monthlyIncome: 0,
-      budgetItems: DEFAULT_BUDGET_ITEMS,
+      budgetItems: usesSupabaseV2Cache() ? [] : DEFAULT_BUDGET_ITEMS,
       savingsGoals: [],
 
       setMonthlyIncome: (amount) => set({ monthlyIncome: amount }),

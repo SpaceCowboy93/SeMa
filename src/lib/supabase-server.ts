@@ -3,11 +3,12 @@ import 'server-only'
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { AccessError, resolveCoupleAccess, type CoupleAccess } from './couple-access'
+import { usesSupabaseV2Cache } from './shared-cache-scope'
 
 function getServerSupabaseClient(token: string) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!url || !anonKey) throw new AccessError(503, 'Authentication is not configured.')
+  if (!url || !anonKey || !usesSupabaseV2Cache()) throw new AccessError(503, 'V2 authentication is not configured.')
   return createClient(url, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { headers: { Authorization: `Bearer ${token}` } },

@@ -101,9 +101,10 @@ describe('selectSharedState: identity isolation', () => {
     expect((result.events as never[]).length).toBe(1)
   })
 
-  it('all 18 SHARED_KEYS are present in the canonical list', () => {
+  it('all 19 SHARED_KEYS, including Trips, are present in the canonical list', () => {
     // Ensure nobody accidentally removed a key
-    expect(SHARED_KEYS.length).toBe(18)
+    expect(SHARED_KEYS.length).toBe(19)
+    expect(SHARED_KEYS).toContain('trips')
     expect(SHARED_KEYS).toContain('events')
     expect(SHARED_KEYS).toContain('todos')
     expect(SHARED_KEYS).toContain('goals')

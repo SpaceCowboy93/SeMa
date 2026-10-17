@@ -67,6 +67,7 @@ export const SEMA_ALLOWED_PATHS = new Set([
   '/wishlist',
   '/journey',
   '/memories',
+  '/trips',
 ])
 
 /** Validate and return an internal SeMa path, falling back to /together. */

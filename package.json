@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/verify-v2-environment.cjs && next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",

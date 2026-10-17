@@ -23,6 +23,7 @@
 
 import type { ActivityEvent } from './activity-event'
 import type { UserName } from '@/types'
+import { appContentCacheKey } from './shared-cache-scope'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@ function validateOutboxEntry(entry: unknown): entry is ActivityOutboxEntry {
 // ── Persistence ───────────────────────────────────────────────────────────────
 
 function outboxKey(userId: UserName): string {
-  return `semacalendar-activity-outbox-v1:${userId}`
+  return appContentCacheKey(`semacalendar-activity-outbox-v1:${userId}`)
 }
 
 export function loadOutbox(userId: UserName): ActivityOutboxEntry[] {

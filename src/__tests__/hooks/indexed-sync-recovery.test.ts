@@ -8,6 +8,7 @@ import { pendingKeys } from '@/lib/durable-cache'
 import { getCacheStorageWarning } from '@/lib/couple-cache'
 import * as backend from '@/lib/indexed-checkpoint'
 import type { CalendarEvent } from '@/types'
+import { newTrip } from '@/lib/trips'
 
 // Unlike the legacy fault-injection suites, this mounts the production adapter.
 vi.unmock('@/lib/durable-cache')
@@ -42,6 +43,7 @@ beforeEach(() => {
   })
 })
 afterEach(() => {
+  vi.unstubAllEnvs()
   expect(network).not.toHaveBeenCalled(); invalidateAuth(); clearActiveCouple(); vi.restoreAllMocks(); vi.unstubAllGlobals()
 })
 async function start(offline = false) {
@@ -203,4 +205,42 @@ it('does not hydrate an obsolete account when authentication changes during Inde
   expect(pendingKeys(other).size).toBe(0)
   expect(useAppStore.getState().events).toEqual([])
   expect(useAppStore.getState().currentUser).toBeNull()
+})
+
+it('restores offline V2 Trips and completed packing after restart, then synchronizes on reconnect', async () => {
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://wwxdinkdjkjiqzynfbdk.supabase.co')
+  root = `semacalendar-v2:project:wwxdinkdjkjiqzynfbdk:generation:2:${access.coupleId}:sema`
+  mocks.read.mockResolvedValue({ data: null, error: { message: 'Offline' } })
+  const hook = await start(true)
+  let id = ''
+  act(() => {
+    useAppStore.setState({ currentUser: 'mateo' })
+    id = useAppStore.getState().addTrip({ title: 'Offline trip', destination: '', country: '', travellers: ['mateo', 'seval'], status: 'idea', budget: 0, currency: 'EUR', notes: 'Keep this note' })
+    useAppStore.getState().updateTrip(id, { packing: [{ id: 'passport', title: 'Passport', isCompleted: true }] })
+  })
+  await waitFor(async () => expect((await durable()).state.trips?.[0].packing[0].isCompleted).toBe(true))
+  expect(mocks.write).not.toHaveBeenCalled()
+  hook.unmount(); invalidateAuth(); clearActiveCouple()
+  await loadCoupleCache(access)
+  expect(useAppStore.getState().trips[0]).toMatchObject({ id, notes: 'Keep this note', packing: [{ id: 'passport', isCompleted: true }] })
+  mocks.read.mockImplementation(async () => ({ data: { state: structuredClone(server), updated_at: version } }))
+  const resumed = await start()
+  await waitFor(() => expect(server.trips).toMatchObject([{ id, notes: 'Keep this note' }]), { timeout: 4000 })
+  await waitFor(() => expect(pendingKeys(access).size).toBe(0))
+  resumed.unmount()
+})
+
+it('receives a partner Trip deletion and keeps it deleted through hydration and an unrelated edit', async () => {
+  const trip = newTrip({ title: 'Partner trip', destination: '', country: '', travellers: ['mateo', 'seval'], status: 'idea', budget: 0, currency: 'EUR', notes: '' }, 'seval')
+  server.trips = [trip]
+  const hook = await start()
+  expect(useAppStore.getState().trips.map(t => t.id)).toEqual([trip.id])
+  server.trips = []; version = '2026-10-02T00:00:00.000Z'
+  act(() => triggerPull())
+  await waitFor(() => expect(useAppStore.getState().trips).toEqual([]))
+  act(() => useAppStore.getState().setMonthlyIncome(200))
+  await waitFor(() => expect(server.monthlyIncome).toBe(200), { timeout: 4000 })
+  expect(server.trips).toEqual([])
+  hook.unmount(); invalidateAuth(); clearActiveCouple(); await loadCoupleCache(access)
+  expect(useAppStore.getState().trips).toEqual([])
 })

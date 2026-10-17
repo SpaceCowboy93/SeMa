@@ -43,7 +43,7 @@ jobs:
         env:
           # Build must not fail due to missing env vars in CI.
           # Provide placeholders — this build is NOT deployed.
-          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_URL: https://wwxdinkdjkjiqzynfbdk.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
 
   # Playwright E2E runs only when a dev server is available.

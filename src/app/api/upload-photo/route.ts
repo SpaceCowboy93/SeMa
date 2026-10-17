@@ -20,7 +20,7 @@ export const POST = withCoupleAuth(async (req, access) => {
     const folder = (form.get('folder') ?? form.get('eventId')) as string | null
 
     // ── Validate inputs ──────────────────────────────────────────────────────
-    if (!(file instanceof File) || typeof folder !== 'string' || !/^(events|todos|focus|goals|wishes|finance-categories|anniversaries)\/[A-Za-z0-9_-]{1,128}$/.test(folder)) {
+    if (!(file instanceof File) || typeof folder !== 'string' || !/^(events|todos|focus|goals|wishes|finance-categories|anniversaries|trips)\/[A-Za-z0-9_-]{1,128}$/.test(folder)) {
       return NextResponse.json({ error: 'Missing file or folder' }, { status: 400 })
     }
 

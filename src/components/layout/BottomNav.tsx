@@ -6,12 +6,14 @@ import { IconNavHome, IconNavPlanner, IconNavFinances, IconNavShopping, IconNavU
 import { motion } from 'framer-motion'
 import { useAppStore } from '@/store/useAppStore'
 import { cn } from '@/lib/utils'
+import { Plane } from 'lucide-react'
 
 const NAV_ITEMS = [
   { href: '/together',  label: 'Home',     icon: IconNavHome     },
   { href: '/planner',   label: 'Planner',  icon: IconNavPlanner  },
   { href: '/plans',     label: 'Finances', icon: IconNavFinances  },
   { href: '/shopping',  label: 'Shopping', icon: IconNavShopping  },
+  { href: '/trips', label: 'Trips', icon: Plane },
   { href: '/us',        label: 'Us',       icon: IconNavUs        },
 ]
 

@@ -18,6 +18,7 @@ import {
   type NotificationPreferences,
 } from './notification-preferences'
 import type { UserName } from '@/types'
+import { appContentCacheKey } from './shared-cache-scope'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -26,8 +27,8 @@ const MAX_FEED_ENTRIES = 50
 
 // ── Key helpers ───────────────────────────────────────────────────────────────
 
-function feedKey(userId: UserName)  { return `semacalendar-activity-feed-v1:${userId}` }
-function prefsKey(userId: UserName) { return `semacalendar-notif-prefs-v1:${userId}` }
+function feedKey(userId: UserName)  { return appContentCacheKey(`semacalendar-activity-feed-v1:${userId}`) }
+function prefsKey(userId: UserName) { return appContentCacheKey(`semacalendar-notif-prefs-v1:${userId}`) }
 
 // ── Activity feed ─────────────────────────────────────────────────────────────
 
