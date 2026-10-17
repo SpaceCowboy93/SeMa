@@ -67,9 +67,9 @@ describe('createActivityEvent', () => {
     expect(event!.importance).toBe('immediate')
   })
 
-  it('assigns feed_only importance for minor actions', () => {
+  it('notifies for partner edits as well as additions', () => {
     const event = makeEvent({ entityType: 'todo', actionType: 'updated' })
-    expect(event!.importance).toBe('feed_only')
+    expect(event!.importance).toBe('immediate')
   })
 
   it('assigns grouped importance for shopping:added', () => {
