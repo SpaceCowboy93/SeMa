@@ -329,7 +329,7 @@ function applyShoppingFinanceSync(
 
 export const useAppStore = create<AppState>()(
   persist<AppState, [], [], Partial<SharedState>>(
-    (set, get) => wrapActivityActions({
+    (set, get) => wrapActivityActions<AppState>({
       // ── Session ─────────────────────────────────────────────────────────────
       currentUser: null,
       setCurrentUser: (user) => set({ currentUser: user }),
