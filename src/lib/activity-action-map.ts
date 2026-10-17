@@ -115,7 +115,7 @@ export function describeActivityChange(actionName: string, before: Record<string
 }
 
 export function wrapActivityActions<T extends {currentUser: UserName|null}>(initial: T, get: () => T): T {
-  const actions = initial as Record<string, unknown>
+  const actions = initial as unknown as Record<string, unknown>
   for (const name of Object.keys(ACTIVITY_ACTIONS)) {
     const original = actions[name]
     if (typeof original !== 'function') continue
