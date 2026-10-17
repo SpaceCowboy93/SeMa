@@ -1276,7 +1276,7 @@ export const useAppStore = create<AppState>()(
       updateNotificationPrefs: (updates) => set(s => ({
         notificationPrefs: mergePreferences(s.notificationPrefs, updates),
       })),
-    }),
+    }, get),
     {
       name: 'semacalendar-v2',
       // The adapter binds this logical name to the backend + household. Never
