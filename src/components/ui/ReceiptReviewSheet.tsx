@@ -1,257 +1,74 @@
 'use client'
 
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { X, Trash2, AlertTriangle } from '@/design/iconSystem'
-import { useAppStore } from '@/store/useAppStore'
-import { type ReceiptResult, type ReceiptItem } from '@/types'
-import { cn, generateId } from '@/lib/utils'
-import { DatePicker } from '@/components/ui/DatePicker'
-
-const CONFIDENCE_WARN = 0.65
+import { useRef, useState } from 'react'
+import type { ReceiptResult, ReceiptItem } from '@/types'
+import { generateId } from '@/lib/utils'
+import { roundMoney, validateReceipt } from '@/lib/receipt-parser'
+import { C2Sheet, C2SheetHeader, C2SheetBody, C2SheetFooter } from './C2Sheet'
 
 interface Props {
-  result: ReceiptResult | null   // null = manual entry (blank form)
+  result: ReceiptResult | null
   photos: string[]
   onClose: () => void
-  onSave: (result: ReceiptResult) => void
+  onSave: (result: ReceiptResult) => void | Promise<void>
 }
+const newItem = (): ReceiptItem => ({ id: generateId(), name: '', quantity: 1, unitPrice: 0, lineTotal: 0 })
+const inputClass = 'w-full min-w-0 min-h-11 rounded-xl bg-white border border-gray-200 px-3 text-base'
 
-function blankResult(): ReceiptResult {
-  return { store: '', date: '', currency: 'EUR', items: [], subtotal: 0, tax: 0, grandTotal: 0 }
-}
-
-function blankItem(): ReceiptItem {
-  return { id: generateId(), name: '', quantity: 1, unitPrice: 0, lineTotal: 0 }
-}
-
-function computeTotals(items: ReceiptItem[], tax: number) {
-  const subtotal   = items.reduce((s, it) => s + it.lineTotal, 0)
-  const grandTotal = parseFloat((subtotal + tax).toFixed(2))
-  return { subtotal: parseFloat(subtotal.toFixed(2)), grandTotal }
-}
-
-export function ReceiptReviewSheet({ result: initialResult, photos, onClose, onSave }: Props) {
-  const currentUser = useAppStore(s => s.currentUser)
-  const primary     = currentUser === 'seval' ? '#8b5cf6' : '#14b8a6'
-
-  const [store,    setStore]    = useState(initialResult?.store    ?? '')
-  const [date,     setDate]     = useState(initialResult?.date     ?? '')
-  const [currency, setCurrency] = useState(initialResult?.currency ?? 'EUR')
-  const [tax,      setTax]      = useState(initialResult?.tax      ?? 0)
-  const [items,    setItems]    = useState<ReceiptItem[]>(
-    initialResult?.items.length
-      ? initialResult.items.map(it => ({ ...it, id: it.id ?? generateId() }))
-      : [blankItem()]
-  )
-
-  function updateItem(idx: number, patch: Partial<ReceiptItem>) {
-    setItems(prev => prev.map((it, i) => {
-      if (i !== idx) return it
-      const next = { ...it, ...patch }
-      if (!('lineTotal' in patch)) {
-        next.lineTotal = parseFloat((next.quantity * next.unitPrice).toFixed(2))
-      }
+export function ReceiptReviewSheet({ result, photos, onClose, onSave }: Props) {
+  const [receipt, setReceipt] = useState<ReceiptResult>(result ?? { store: '', date: '', currency: 'EUR', items: [newItem()], subtotal: 0, tax: 0, grandTotal: 0 })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const lock = useRef(false)
+  function editItem(index: number, patch: Partial<ReceiptItem>) {
+    setReceipt(r => ({ ...r, items: r.items.map((item, i) => {
+      if (i !== index) return item
+      const next = { ...item, ...patch }
+      if ('quantity' in patch || 'unitPrice' in patch) next.lineTotal = roundMoney(next.quantity * next.unitPrice)
       return next
-    }))
+    }) }))
   }
-
-  function removeItem(idx: number) {
-    setItems(prev => prev.filter((_, i) => i !== idx))
+  async function save() {
+    if (lock.current) return
+    const checked = { ...receipt, store: receipt.store.trim(), subtotal: roundMoney(receipt.items.reduce((s, i) => s + i.lineTotal, 0)), tax: 0 }
+    const message = validateReceipt(checked)
+    if (message) { setError(message); return }
+    lock.current = true; setSaving(true); setError('')
+    try { await onSave(checked); onClose() }
+    catch (e) { setError(e instanceof Error ? e.message : 'Could not save the receipt. Please try again.') }
+    finally { lock.current = false; setSaving(false) }
   }
-
-  function handleSave() {
-    const validItems = items.filter(it => it.name.trim())
-    const { subtotal, grandTotal } = computeTotals(validItems, tax)
-    onSave({
-      store:     store.trim() || 'Receipt',
-      date:      date || new Date().toISOString().slice(0, 10),
-      currency,
-      items:     validItems,
-      subtotal,
-      tax,
-      grandTotal,
-    })
-    onClose()
-  }
-
-  const { subtotal, grandTotal } = computeTotals(items, tax)
-  const hasLowConfidence = items.some(it => it.confidence !== undefined && it.confidence < CONFIDENCE_WARN)
-  const isManual = !initialResult
-
+  const subtotal = roundMoney(receipt.items.reduce((sum, item) => sum + item.lineTotal, 0))
   return (
-    <>
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        onClick={onClose}
-        className="fixed inset-0 z-[80] c2-backdrop"
-      />
-      <motion.div
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 360 }}
-        className="fixed bottom-0 left-0 right-0 z-[80] c2-sheet-bg rounded-t-[2rem] shadow-modal max-w-lg mx-auto max-h-[92vh] overflow-y-auto"
-      >
-        <div className="px-5 pt-4 pb-12">
-          <div className="drag-handle mb-5" />
-
-          <div className="flex items-start justify-between mb-5">
-            <div>
-              <h2 className="text-lg font-bold text-gray-800">
-                {isManual ? 'Enter Receipt' : 'Review Receipt'}
-              </h2>
-              <p className="text-xs text-gray-400 mt-0.5">
-                {isManual ? 'Fill in the details manually' : 'Check and correct the scanned details'}
-              </p>
+    <C2Sheet open fitVisualViewport onClose={() => { if (!lock.current) onClose() }} aria-label="Review shopping receipt" zIndex={80}>
+      <C2SheetHeader title="Review receipt" subtitle="Check each field before saving" onClose={() => { if (!lock.current) onClose() }} />
+      <C2SheetBody className="space-y-4">
+        <p className="text-sm text-gray-600">OCR can miss items, discounts and quantities. Compare with your receipt. The confirmed total below is the amount added to Shopping in Finances.</p>
+        {photos.length > 0 && <details><summary className="min-h-11 text-sm">View receipt photos</summary>{photos.map((src, index) =>
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={index} src={src} alt={`Original receipt ${index + 1}`} className="w-full rounded-xl mb-2" />)}</details>}
+        <fieldset disabled={saving} className="space-y-4 min-w-0">
+          <label className="block text-sm">Shop<input className={inputClass} value={receipt.store} onChange={e => setReceipt(r => ({ ...r, store: e.target.value }))} /></label>
+          <label className="block text-sm">Purchase date<input className={inputClass} type="date" value={receipt.date} onChange={e => setReceipt(r => ({ ...r, date: e.target.value }))} /></label>
+          {receipt.items.map((item, index) => <div key={item.id} className="rounded-2xl bg-gray-50 p-3 space-y-2">
+            {item.confidence !== undefined && item.confidence < 0.65 && <p className="text-xs text-amber-800">Hard to read — please check this item.</p>}
+            <label className="block text-sm">Product {index + 1}<input className={inputClass} value={item.name} onChange={e => editItem(index, { name: e.target.value })} /></label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-sm">Quantity<input className={inputClass} inputMode="decimal" type="number" min="0.001" step="any" value={Number.isFinite(item.quantity) ? item.quantity : ''} onChange={e => editItem(index, { quantity: e.target.valueAsNumber })} /></label>
+              <label className="text-sm">Unit price (€)<input className={inputClass} inputMode="decimal" type="number" step="0.01" value={Number.isFinite(item.unitPrice) ? item.unitPrice : ''} onChange={e => editItem(index, { unitPrice: e.target.valueAsNumber })} /></label>
             </div>
-            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full c2-sheet-x shrink-0">
-              <X size={16} />
-            </button>
-          </div>
-
-          {/* Low-confidence warning */}
-          <AnimatePresence>
-            {hasLowConfidence && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-                className="mb-4 flex items-start gap-2 px-4 py-3 rounded-2xl bg-amber-50 text-amber-700"
-              >
-                <AlertTriangle size={15} className="shrink-0 mt-0.5" />
-                <p className="text-xs leading-relaxed">
-                  Some fields were hard to read — highlighted items may need correction.
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Receipt photos */}
-          {photos.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto pb-1 mb-4 scrollbar-hide">
-              {photos.map((src, i) => (
-                <img key={i} src={src} alt="" className="w-20 h-24 object-cover rounded-xl shrink-0 border border-gray-100" />
-              ))}
-            </div>
-          )}
-
-          {/* Store + Date + Currency */}
-          <div className="space-y-2 mb-4">
-            <div className="c2-sheet-section px-4 py-3">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Store / Merchant</p>
-              <input
-                value={store} onChange={e => setStore(e.target.value)}
-                placeholder="e.g. Carrefour"
-                className="w-full text-sm text-gray-800 bg-transparent outline-none"
-              />
-            </div>
-            <div className="flex gap-2">
-              <div className="flex-1 bg-gray-50 rounded-2xl px-4 py-3">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Date</p>
-                <DatePicker value={date} onChange={setDate}
-                  triggerClassName="bg-transparent px-0 py-0 rounded-none text-sm text-gray-700" />
-              </div>
-              <div className="w-24 bg-gray-50 rounded-2xl px-4 py-3">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Currency</p>
-                <input
-                  value={currency} onChange={e => setCurrency(e.target.value.toUpperCase().slice(0, 3))}
-                  placeholder="EUR"
-                  className="w-full text-sm text-gray-700 bg-transparent outline-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Items */}
-          <div className="mb-4">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Items</p>
-
-            {/* Column labels */}
-            <div className="grid grid-cols-[1fr_56px_72px_28px] gap-1.5 px-2 mb-1">
-              <span className="text-[9px] font-bold text-gray-300 uppercase">Name</span>
-              <span className="text-[9px] font-bold text-gray-300 uppercase text-center">Qty</span>
-              <span className="text-[9px] font-bold text-gray-300 uppercase text-right">Price</span>
-              <span />
-            </div>
-
-            <div className="space-y-1.5">
-              <AnimatePresence initial={false}>
-                {items.map((it, idx) => {
-                  const isLowConf = it.confidence !== undefined && it.confidence < CONFIDENCE_WARN
-                  return (
-                    <motion.div
-                      key={it.id}
-                      layout
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.15 }}
-                    >
-                      <div className={cn(
-                        'grid grid-cols-[1fr_56px_72px_28px] gap-1.5 px-2 py-2.5 rounded-xl',
-                        isLowConf ? 'bg-amber-50' : 'bg-gray-50'
-                      )}>
-                        <input
-                          value={it.name}
-                          onChange={e => updateItem(idx, { name: e.target.value })}
-                          placeholder="Item name"
-                          className={cn('text-sm bg-transparent outline-none truncate', isLowConf ? 'text-amber-800' : 'text-gray-800')}
-                        />
-                        <input
-                          type="number" min={1}
-                          value={it.quantity}
-                          onChange={e => updateItem(idx, { quantity: Math.max(1, Number(e.target.value)) })}
-                          onFocus={e => e.target.select()}
-                          className="text-sm text-center bg-transparent outline-none text-gray-700 w-full"
-                        />
-                        <input
-                          type="number" min={0} step={0.01}
-                          value={it.unitPrice}
-                          onChange={e => updateItem(idx, { unitPrice: Number(e.target.value) })}
-                          onFocus={e => e.target.select()}
-                          className={cn('text-sm text-right bg-transparent outline-none w-full', isLowConf ? 'text-amber-800' : 'text-gray-700')}
-                        />
-                        <button onClick={() => removeItem(idx)} className="flex items-center justify-center text-gray-300 active:text-red-400">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </motion.div>
-                  )
-                })}
-              </AnimatePresence>
-            </div>
-          </div>
-
-          {/* Totals */}
-          <div className="c2-sheet-section px-4 py-3 mb-6 space-y-2">
-            <div className="flex items-center justify-between text-sm text-gray-500">
-              <span>Subtotal</span>
-              <span>{currency} {subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-500">Tax</span>
-              <input
-                type="number" min={0} step={0.01}
-                value={tax} onChange={e => setTax(Number(e.target.value))}
-                onFocus={e => e.target.select()}
-                className="text-right text-sm text-gray-700 bg-transparent outline-none w-24"
-              />
-            </div>
-            <div className="h-px bg-gray-200" />
-            <div className="flex items-center justify-between text-sm font-bold text-gray-800">
-              <span>Total</span>
-              <span>{currency} {grandTotal.toFixed(2)}</span>
-            </div>
-          </div>
-
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={handleSave}
-            disabled={items.filter(it => it.name.trim()).length === 0}
-            className="w-full py-4 rounded-2xl text-white text-sm font-semibold disabled:opacity-40"
-            style={{ background: primary }}
-          >
-            Save receipt
-          </motion.button>
-        </div>
-      </motion.div>
-    </>
+            <label className="block text-sm">Line total (€)<input className={inputClass} inputMode="decimal" type="number" step="0.01" value={Number.isFinite(item.lineTotal) ? item.lineTotal : ''} onChange={e => editItem(index, { lineTotal: e.target.valueAsNumber })} /></label>
+            <button className="min-h-11 text-sm text-gray-600" onClick={() => setReceipt(r => ({ ...r, items: r.items.filter((_, i) => i !== index) }))}>Remove product {index + 1}</button>
+          </div>)}
+          <button className="min-h-12 w-full rounded-xl border border-gray-300" onClick={() => setReceipt(r => ({ ...r, items: [...r.items, newItem()] }))}>Add product / discount</button>
+          <p className="text-sm">Item sum: €{Number.isFinite(subtotal) ? subtotal.toFixed(2) : '—'}</p>
+          <label className="block font-medium text-sm">Total paid (€)<input className={inputClass} inputMode="decimal" type="number" min="0.01" step="0.01" value={Number.isFinite(receipt.grandTotal) ? receipt.grandTotal : ''} onChange={e => setReceipt(r => ({ ...r, grandTotal: e.target.valueAsNumber }))} /></label>
+          <p className="text-xs text-gray-500">Use the final EUR total after discounts, including VAT and deposits. VAT is not added again.</p>
+          {Math.abs(subtotal - receipt.grandTotal) > 0.01 && <p className="text-sm text-amber-800">Items and total differ. Check for missing items, deposits or discounts; Finances will use the total paid.</p>}
+        </fieldset>
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      </C2SheetBody>
+      <C2SheetFooter><button disabled={saving} className="w-full min-h-12 rounded-2xl bg-[#527052] text-white disabled:opacity-50" onClick={() => void save()}>{saving ? 'Saving…' : 'Confirm purchase & add to Finances'}</button></C2SheetFooter>
+    </C2Sheet>
   )
 }

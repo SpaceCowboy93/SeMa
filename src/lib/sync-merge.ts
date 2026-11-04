@@ -66,11 +66,25 @@ function mergeValue(base: unknown, local: unknown, remote: unknown, moodCollecti
       // The legacy text list is derived from the structured Dream checklist.
       if (key === 'checklist' && Array.isArray(local.checklistItems) && Array.isArray(remote.checklistItems)) continue
       // Independent changes to one record both advance its modification metadata.
+      if (key === 'items' && base.items === undefined && typeof base.actual === 'number' && Array.isArray(local.items) && Array.isArray(remote.items) && [...local.items, ...remote.items].some(item => item.id?.startsWith('receipt-finance-'))) {
+        result.items = mergeValue([], local.items, remote.items, false, [...path, key], onConflict); continue
+      }
+      if (key === 'actual' && [base, local, remote].some(record => Array.isArray(record.items) && record.items.some(item => item.id?.startsWith('receipt-finance-')))) { result.actual = remote.actual; continue }
       const value = key === 'updatedAt' && typeof local[key] === 'string' && typeof remote[key] === 'string' &&
         Number.isFinite(Date.parse(local[key])) && Number.isFinite(Date.parse(remote[key]))
         ? (Date.parse(local[key]) > Date.parse(remote[key]) ? local[key] : remote[key])
         : mergeValue(base[key], local[key], remote[key], false, [...path, key], onConflict)
       if (value !== undefined) Object.defineProperty(result, key, { value, enumerable: true, configurable: true, writable: true })
+    }
+    // Receipt entries are a ledger: concurrent additions must contribute once even
+    // when both devices started with the same category total.
+    const receiptSum = (record: Record<string, unknown>) => Array.isArray(record.items)
+      ? record.items.reduce((sum: number, item: { id?: string; unitPrice?: number; quantity?: number }) =>
+        sum + (item.id?.startsWith('receipt-finance-') ? (item.unitPrice ?? 0) * (item.quantity ?? 1) : 0), 0) : 0
+    if (typeof result.actual === 'number' && Array.isArray(result.items) &&
+        [base, local, remote, result].some(record => Array.isArray(record.items) && record.items.some(item => item.id?.startsWith('receipt-finance-')))) {
+      const residual = (record: Record<string, unknown>) => Math.round(((record.actual as number) - receiptSum(record)) * 100) / 100
+      result.actual = Math.round(((mergeValue(residual(base), residual(local), residual(remote), false, [...path, 'actual'], onConflict) as number) + receiptSum(result)) * 100) / 100
     }
     if (Array.isArray(result.checklistItems)) result.checklist = result.checklistItems.map(item => item.title)
     return result
@@ -119,6 +133,9 @@ function linkedNodes(snapshots: Partial<SharedState>[]) {
     edges.get(a)!.add(b); edges.get(b)!.add(a)
   }
   for (const state of snapshots) {
+    state.shoppingLists?.forEach(list => {
+      if (list.receipt?.fingerprint && list.financeMonthKey) connect(node('shoppingLists', list.id), node('financeMonths', list.financeMonthKey))
+    })
     state.events?.forEach(event => {
       if (event.linkedGoalId) connect(node('events', event.id), node('goals', event.linkedGoalId))
       if (event.linkedTodoId) connect(node('events', event.id), node('todos', event.linkedTodoId))

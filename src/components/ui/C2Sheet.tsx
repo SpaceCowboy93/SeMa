@@ -228,6 +228,7 @@ interface SheetProps {
   'aria-label'?: string
   /** Close sheet when backdrop is tapped. Default true. */
   closeOnBackdrop?: boolean
+  fitVisualViewport?: boolean
 }
 
 /**
@@ -250,8 +251,25 @@ export function C2Sheet({
   zIndex = 50,
   'aria-label': ariaLabel,
   closeOnBackdrop = true,
+  fitVisualViewport = false,
 }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null)
+
+  // Opt-in for receipt forms: keep the save action above the phone keyboard.
+  useEffect(() => {
+    if (!open || !fitVisualViewport || !window.visualViewport) return
+    const viewport = window.visualViewport
+    const update = () => {
+      const panel = panelRef.current
+      if (!panel) return
+      panel.style.maxHeight = `${Math.max(160, viewport.height - 16)}px`
+      panel.style.bottom = `${Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)}px`
+    }
+    update()
+    viewport.addEventListener('resize', update)
+    viewport.addEventListener('scroll', update)
+    return () => { viewport.removeEventListener('resize', update); viewport.removeEventListener('scroll', update) }
+  }, [open, fitVisualViewport])
 
   // Lock body scroll while sheet is open
   useEffect(() => {

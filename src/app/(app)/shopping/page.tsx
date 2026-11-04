@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from '@/design/iconSystem'
 import { useAppStore } from '@/store/useAppStore'
+import { receiptFingerprint } from '@/lib/receipt-parser'
 import { getLivingMoment } from '@/lib/livingMoment'
 import { getTodayString, cn } from '@/lib/utils'
 import { C2PageBackground } from '@/components/ui/C2PageBackground'
@@ -21,7 +22,7 @@ import { ShoppingListEditorSheet } from '@/components/ui/ShoppingListEditorSheet
 import { ReceiptScannerSheet } from '@/components/ui/ReceiptScannerSheet'
 import { ReceiptReviewSheet } from '@/components/ui/ReceiptReviewSheet'
 import DeleteConfirmSheet from '@/components/ui/DeleteConfirmSheet'
-import { type ShoppingItem, type ShoppingList, type ReceiptResult, type ShoppingListReceipt } from '@/types'
+import { type ShoppingItem, type ShoppingList, type ReceiptResult } from '@/types'
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Palette — matches the warm natural reference
@@ -113,8 +114,7 @@ export default function ShoppingPage() {
   const countdowns   = useAppStore(s => s.countdowns)
   const todos        = useAppStore(s => s.todos)
   const partnerNotes = useAppStore(s => s.partnerNotes)
-  const createList   = useAppStore(s => s.createShoppingList)
-  const updateList   = useAppStore(s => s.updateShoppingList)
+  const confirmReceipt = useAppStore(s => s.confirmReceipt)
   const deleteList   = useAppStore(s => s.deleteShoppingList)
   const addItem      = useAppStore(s => s.addShoppingItem)
   const toggleItem   = useAppStore(s => s.toggleShoppingItem)
@@ -275,19 +275,12 @@ export default function ShoppingPage() {
   }
 
   /* ── Receipt ────────────────────────────────────────────────────────────── */
-  function handleScanSave(result: ReceiptResult) {
-    const name = result.store
-      ? `${result.store} receipt`
-      : `Receipt ${result.date || new Date().toLocaleDateString()}`
-    const receipt: ShoppingListReceipt = {
-      ...result,
-      photos: scanPhotos.length ? scanPhotos : undefined,
-    }
-    const newId = createList({ name })
-    setTimeout(() => updateList(newId, { receipt }), 0)
+  async function handleScanSave(result: ReceiptResult) {
+    const fingerprint = await receiptFingerprint(result)
+    confirmReceipt(result, fingerprint)
     setScanResult(null)
     setScanPhotos([])
-    setExpandedListId(newId)
+    setPastListsOpen(true)
   }
 
   /* ── Helpers ────────────────────────────────────────────────────────────── */
@@ -336,7 +329,7 @@ export default function ShoppingPage() {
           </div>
           <div>
             <p style={{ fontSize: 13, fontWeight: 600, color: C.textDark, lineHeight: 1.3 }}>Scan receipt</p>
-            <p style={{ fontSize: 10, color: C.textLight, marginTop: 2 }}>Add items in a second</p>
+            <p style={{ fontSize: 10, color: C.textLight, marginTop: 2 }}>Read & review a receipt</p>
           </div>
         </motion.button>
 
@@ -815,7 +808,7 @@ export default function ShoppingPage() {
           </>
         )}
 
-        {/* ── Past lists ────────────────────────────────────────────────── */}
+        {/* ── Shopping history ────────────────────────────────────────────────── */}
         {completedLists.length > 0 && (
           <div className="mt-6">
             <button
@@ -823,7 +816,7 @@ export default function ShoppingPage() {
               className="flex items-center justify-between w-full mb-2 py-1"
             >
               <span style={{ fontSize: 11, fontWeight: 600, color: C.textLight, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                Past lists
+                Shopping history
               </span>
               <div className="flex items-center gap-1.5">
                 <span style={{ fontSize: 12, color: C.textLight }}>{completedLists.length}</span>
@@ -850,15 +843,16 @@ export default function ShoppingPage() {
                         <div
                           key={list.id}
                           className="flex items-center gap-3 px-4 rounded-2xl"
-                          style={{ height: 56, background: 'rgba(255,255,255,0.44)', opacity: 0.65 }}
+                          style={{ minHeight: 56, background: 'rgba(255,255,255,0.44)' }}
                         >
                           <div className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center"
                             style={{ background: C.badgeBg }}>
                             <Check size={9} strokeWidth={2.5} style={{ color: C.sage }} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="line-through truncate" style={{ fontSize: 13, color: C.textMid }}>{list.name}</p>
-                            <p style={{ fontSize: 10, color: C.textLight, marginTop: 1 }}>{checked}/{list.items.length} items</p>
+                            <p className="truncate" style={{ fontSize: 13, color: C.textMid }}>{list.name}</p>
+                            <p style={{ fontSize: 10, color: C.textLight, marginTop: 1 }}>{list.receipt ? `${list.receipt.date} · €${list.receipt.grandTotal.toFixed(2)} · ${list.items.length} items` : `${checked}/${list.items.length} items`}</p>
+                            {list.receipt && <details className="text-xs py-2"><summary className="min-h-11 flex items-center cursor-pointer">View purchased items</summary>{list.receipt.items.map(item => <p key={item.id} className="py-1">{item.name} · {item.quantity} × €{item.unitPrice.toFixed(2)} = €{item.lineTotal.toFixed(2)}</p>)}</details>}
                           </div>
                           <button onClick={() => setDeleteListId(list.id)} aria-label={`Delete ${list.name}`} className="p-1 active:opacity-60">
                             <Trash2 size={13} strokeWidth={1.5} style={{ color: '#c8c0b4' }} />

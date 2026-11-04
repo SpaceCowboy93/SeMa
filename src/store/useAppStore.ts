@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { coupleStorage, pendingKeys, persistSyncCheckpoint, readSyncBase, setCacheScope, initializeDurableCache, enableCacheWrites } from '@/lib/durable-cache'
 import { selectSharedState, type SharedState } from '@/lib/shared-state'
+import { validateReceipt, roundMoney } from '@/lib/receipt-parser'
 import { sameValue } from '@/lib/sync-merge'
 import { goalChecklist, reconcileChecklist } from '@/lib/dream-checklist'
 import { isValidTrip, newTrip } from '@/lib/trips'
@@ -21,7 +22,7 @@ import {
   type LoveNote, type WishlistItem, type Countdown, type Memory,
   type MoodType, type WishlistCategory, type EventColor,
   type Goal, type GoalCategory, type PartnerNote,
-  type ShoppingList, type ShoppingItem, type ShoppingListInput,
+  type ShoppingList, type ShoppingItem, type ShoppingListInput, type ReceiptResult,
   type BudgetItem, type SavingsGoal, type FinanceCategoryItem,
   type FinanceMonth, type FinanceMonthReport, type SavingsTransaction,
   type FocusActivity, type FocusChecklistItem, type FocusReminder, type FocusPriority,
@@ -134,6 +135,7 @@ export interface AppState {
 
   // Shopping
   shoppingLists: ShoppingList[]
+  confirmReceipt: (receipt: ReceiptResult, fingerprint: string) => string
   createShoppingList: (data: ShoppingListInput) => string
   updateShoppingList: (id: string, updates: Partial<ShoppingList>) => void
   deleteShoppingList: (id: string) => void
@@ -215,7 +217,7 @@ function applyShoppingFinanceSync(
 ): { financeMonths: FinanceMonth[]; listPatch: Partial<ShoppingList> } {
 
   const listCost = (l: ShoppingList) =>
-    l.items.reduce((s, i) => s + (i.price ?? 0) * i.quantity, 0)
+    l.receipt?.grandTotal ?? l.items.reduce((s, i) => s + (i.price ?? 0) * i.quantity, 0)
 
   const findShoppingLoc = (months: FinanceMonth[], key: string) => {
     const mi = months.findIndex(m => m.key === key)
@@ -257,7 +259,8 @@ function applyShoppingFinanceSync(
     const m2 = ensureMonth(months, key)
     const loc = findShoppingLoc(m2, key)
     if (!loc) return { months: m2, itemId: '' }
-    const itemId = generateId()
+    const itemId = list.receipt?.fingerprint ? `receipt-finance-${list.receipt.fingerprint}` : generateId()
+    if (m2[loc.mi].budgetItems[loc.bi].items?.some(i => i.id === itemId)) return { months: m2, itemId }
     const newItem: FinanceCategoryItem = {
       id: itemId, name: list.name, quantity: 1, unitPrice: total,
       note: list.storeName, isPaid: true, createdAt: now, updatedAt: now,
@@ -282,7 +285,7 @@ function applyShoppingFinanceSync(
   if (!wasCompleted && nowCompleted) {
     const total = listCost(newList)
     if (total <= 0) return { financeMonths, listPatch: {} }
-    const monthKey = (newList.completedAt ?? now).slice(0, 7)
+    const monthKey = (newList.receipt?.date ?? newList.completedAt ?? now).slice(0, 7)
     const { months, itemId } = addFinItem(financeMonths, monthKey, newList, total)
     if (!itemId) return { financeMonths, listPatch: {} }
     return { financeMonths: months, listPatch: { financeItemId: itemId, financeMonthKey: monthKey } }
@@ -300,7 +303,7 @@ function applyShoppingFinanceSync(
   // ── Case 3: still completed — update existing link ──
   if (wasCompleted && nowCompleted && oldList.financeItemId && oldList.financeMonthKey) {
     const newTotal = listCost(newList)
-    const newCompletedAt = newList.completedAt ?? oldList.completedAt ?? now
+    const newCompletedAt = newList.receipt?.date ?? newList.completedAt ?? oldList.completedAt ?? now
     const newMonthKey = newCompletedAt.slice(0, 7)
 
     if (newMonthKey !== oldList.financeMonthKey) {
@@ -861,6 +864,36 @@ export const useAppStore = create<AppState>()(
 
       // ── Shopping ─────────────────────────────────────────────────────────────
       shoppingLists: [],
+
+      confirmReceipt: (receipt, fingerprint) => {
+        const state = get()
+        if (!state.currentUser) throw new Error('Please sign in before saving.')
+        const invalid = validateReceipt(receipt)
+        if (invalid) throw new Error(invalid)
+        if (!/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error('Invalid receipt identifier.')
+        const id = `receipt-${fingerprint}`
+        if (state.shoppingLists.some(l => l.id === id || l.receipt?.fingerprint === fingerprint)) {
+          throw new Error('This receipt is already in Shopping history. No extra finance entry was added.')
+        }
+        const now = new Date().toISOString()
+        const list: ShoppingList = {
+          id, name: `${receipt.store} receipt`, storeName: receipt.store, date: receipt.date,
+          createdBy: state.currentUser, createdAt: now, updatedAt: now,
+          isCompleted: true, completedBy: state.currentUser, completedAt: now,
+          receipt: { ...receipt, grandTotal: roundMoney(receipt.grandTotal), fingerprint },
+          items: receipt.items.map((item, index) => ({ id: `${id}-${index}`, name: item.name,
+            quantity: item.quantity, price: item.unitPrice, isChecked: true, checkedBy: state.currentUser!, createdAt: now })),
+        }
+        // Existing couple_state synchronization persists both collections in one snapshot.
+        // Restore a removed Shopping category only in the receipt's target month.
+        const monthKey = receipt.date.slice(0, 7)
+        const months = state.financeMonths.map(m => m.key !== monthKey || m.budgetItems.some(b => b.category === 'Shopping' || b.emoji === '🛍️') ? m : {
+          ...m, budgetItems: [...m.budgetItems, { id: 'receipt-shopping', category: 'Shopping', emoji: '🛍️', planned: 0, actual: 0 }],
+        })
+        const { financeMonths, listPatch } = applyShoppingFinanceSync(months, { ...list, isCompleted: false }, list, now)
+        set({ shoppingLists: [...state.shoppingLists, { ...list, ...listPatch }], financeMonths })
+        return id
+      },
 
       createShoppingList: (data) => {
         const { currentUser } = get()

@@ -1,0 +1,10 @@
+// Serve pinned OCR assets from our own origin (including with production CSP).
+const fs = require('node:fs')
+const path = require('node:path')
+const target = path.join(process.cwd(), 'public/receipt-ocr')
+fs.mkdirSync(target, { recursive: true })
+fs.copyFileSync(require.resolve('tesseract.js/dist/worker.min.js'), path.join(target, 'worker.min.js'))
+const core = path.dirname(require.resolve('tesseract.js-core/package.json'))
+for (const file of fs.readdirSync(core).filter(f => /\.wasm(?:\.js)?$/.test(f))) fs.copyFileSync(path.join(core, file), path.join(target, file))
+const lang = path.dirname(require.resolve('@tesseract.js-data/eng/package.json'))
+fs.copyFileSync(path.join(lang, '4.0.0_best_int/eng.traineddata.gz'), path.join(target, 'eng.traineddata.gz'))

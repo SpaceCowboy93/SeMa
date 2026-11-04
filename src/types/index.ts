@@ -205,6 +205,8 @@ export interface SavingsGoal {
 }
 
 export interface ShoppingListReceipt {
+  fingerprint?: string
+
   store: string
   date: string          // YYYY-MM-DD
   currency: string      // e.g. 'EUR'
