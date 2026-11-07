@@ -2,12 +2,14 @@
 
 import { useRef, useState } from 'react'
 import type { ReceiptResult, ReceiptItem } from '@/types'
+import { financialWarnings, type ScanResult } from '@/lib/receipt-sections'
+import { ReceiptRowPreview } from './ReceiptRowPreview'
 import { generateId } from '@/lib/utils'
 import { roundMoney, validateReceipt } from '@/lib/receipt-parser'
 import { C2Sheet, C2SheetHeader, C2SheetBody, C2SheetFooter } from './C2Sheet'
 
 interface Props {
-  result: ReceiptResult | null
+  result: ScanResult | null
   photos: string[]
   onClose: () => void
   onSave: (result: ReceiptResult) => void | Promise<void>
@@ -16,9 +18,18 @@ const newItem = (): ReceiptItem => ({ id: generateId(), name: '', quantity: 1, u
 const inputClass = 'w-full min-w-0 min-h-11 rounded-xl bg-white border border-gray-200 px-3 text-base'
 
 export function ReceiptReviewSheet({ result, photos, onClose, onSave }: Props) {
-  const [receipt, setReceipt] = useState<ReceiptResult>(result ?? { store: '', date: '', currency: 'EUR', items: [newItem()], subtotal: 0, tax: 0, grandTotal: 0 })
+  const evidence = result?.evidence
+  const [receipt, setReceipt] = useState<ReceiptResult>(() => ({
+    store: result?.store ?? '', date: result?.date ?? '', currency: result?.currency ?? 'EUR',
+    items: result?.items ?? [newItem()], subtotal: result?.subtotal ?? 0,
+    tax: result?.tax ?? 0, grandTotal: result?.grandTotal ?? 0,
+  }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [selected, setSelected] = useState('')
+  const [reviewed, setReviewed] = useState<number[]>([])
+  const [acceptedReceipt, setAcceptedReceipt] = useState<ReceiptResult>()
+  const discrepancies = financialWarnings(receipt)
   const lock = useRef(false)
   function editItem(index: number, patch: Partial<ReceiptItem>) {
     setReceipt(r => ({ ...r, items: r.items.map((item, i) => {
@@ -33,6 +44,10 @@ export function ReceiptReviewSheet({ result, photos, onClose, onSave }: Props) {
     const checked = { ...receipt, store: receipt.store.trim(), subtotal: roundMoney(receipt.items.reduce((s, i) => s + i.lineTotal, 0)), tax: 0 }
     const message = validateReceipt(checked)
     if (message) { setError(message); return }
+    if (reviewed.length < (evidence?.warnings.length ?? 0) || (discrepancies.length && acceptedReceipt !== receipt)) {
+      setError('Review each flagged row and financial difference before confirming.')
+      return
+    }
     lock.current = true; setSaving(true); setError('')
     try { await onSave(checked); onClose() }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not save the receipt. Please try again.') }
@@ -50,7 +65,14 @@ export function ReceiptReviewSheet({ result, photos, onClose, onSave }: Props) {
         <fieldset disabled={saving} className="space-y-4 min-w-0">
           <label className="block text-sm">Shop<input className={inputClass} value={receipt.store} onChange={e => setReceipt(r => ({ ...r, store: e.target.value }))} /></label>
           <label className="block text-sm">Purchase date<input className={inputClass} type="date" value={receipt.date} onChange={e => setReceipt(r => ({ ...r, date: e.target.value }))} /></label>
-          {receipt.items.map((item, index) => <div key={item.id} className="rounded-2xl bg-gray-50 p-3 space-y-2">
+          {evidence?.warnings.map((warning, i) => <div key={i} className="p-3 rounded-xl bg-amber-50 space-y-2">
+            <p className="text-sm">{warning.message} Photo {warning.position.photo + 1}{warning.text && ` · ${warning.text}`}</p>
+            <ReceiptRowPreview photos={photos} position={warning.position} />
+            <label className="flex gap-2 items-center min-h-11 text-sm"><input type="checkbox" checked={reviewed.includes(i)} onChange={e => setReviewed(ids => e.target.checked ? [...ids, i] : ids.filter(id => id !== i))} />I checked this row against the products below</label>
+          </div>)}
+          {receipt.items.map((item, index) => <div key={item.id} onClick={() => setSelected(item.id)} onFocus={() => setSelected(item.id)} className="rounded-2xl bg-gray-50 p-3 space-y-2">
+            {evidence?.positions[item.id] && <button type="button" className="min-h-11 text-sm text-[#527052]" onClick={() => setSelected(item.id)}>Locate product {index + 1} on photo {evidence.positions[item.id].photo + 1}</button>}
+            {selected === item.id && evidence?.positions[item.id] && <ReceiptRowPreview photos={photos} position={evidence.positions[item.id]} />}
             {item.confidence !== undefined && item.confidence < 0.65 && <p className="text-xs text-amber-800">Hard to read — please check this item.</p>}
             <label className="block text-sm">Product {index + 1}<input className={inputClass} value={item.name} onChange={e => editItem(index, { name: e.target.value })} /></label>
             <div className="grid grid-cols-2 gap-2">
@@ -64,7 +86,8 @@ export function ReceiptReviewSheet({ result, photos, onClose, onSave }: Props) {
           <p className="text-sm">Item sum: €{Number.isFinite(subtotal) ? subtotal.toFixed(2) : '—'}</p>
           <label className="block font-medium text-sm">Total paid (€)<input className={inputClass} inputMode="decimal" type="number" min="0.01" step="0.01" value={Number.isFinite(receipt.grandTotal) ? receipt.grandTotal : ''} onChange={e => setReceipt(r => ({ ...r, grandTotal: e.target.valueAsNumber }))} /></label>
           <p className="text-xs text-gray-500">Use the final EUR total after discounts, including VAT and deposits. VAT is not added again.</p>
-          {Math.abs(subtotal - receipt.grandTotal) > 0.01 && <p className="text-sm text-amber-800">Items and total differ. Check for missing items, deposits or discounts; Finances will use the total paid.</p>}
+          {discrepancies.map((message, i) => <p key={i} className="text-sm text-amber-800">{message}</p>)}
+          {discrepancies.length > 0 && <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={acceptedReceipt === receipt} onChange={e => setAcceptedReceipt(e.target.checked ? receipt : undefined)} />I checked these differences and verified the total paid</label>}
         </fieldset>
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       </C2SheetBody>

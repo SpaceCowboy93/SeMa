@@ -65,3 +65,85 @@ test('local OCR → correction → history and finance → duplicate guard', asy
   expect(external).toEqual([])
   expect(errors).toEqual([])
 })
+
+test('50 synthetic products across three overlapping photos, plus an unreadable row', async ({ page }) => {
+  test.setTimeout(240000)
+  await page.goto('/dev-preview/shopping')
+  const names = ['MILK', 'BREAD', 'BUTTER', 'HONEY', 'CARROTS', 'APPLES', 'BEANS', 'PASTA', 'RICE', 'PEARS']
+  const basket = Array.from({ length: 50 }, (_, i) => ({
+    name: names[i % names.length], price: (1 + Math.floor(i / 10)).toFixed(2),
+  }))
+  // A purchase in the shared region also occurs immediately beyond it.
+  for (const i of [19, 20, 21]) basket[i] = { name: 'MILK', price: '2.00' }
+  const lines = basket.map(item => item.name.padEnd(18) + item.price)
+  const total = basket.reduce((sum, item) => sum + Number(item.price), 0).toFixed(2)
+  const sections = [
+    ['LIDL', '04/11/2026', ...lines.slice(0, 21)],
+    lines.slice(17, 39),
+    [...lines.slice(35), 'FADED PRICE', 'TOTAL EUR'.padEnd(18) + total],
+  ]
+  const photos = await page.evaluate(parts => parts.map(lines => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 720
+    canvas.height = 50 + lines.length * 42
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = 'white'; ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = 'black'; ctx.font = 'bold 28px monospace'
+    lines.forEach((line, i) => ctx.fillText(line, 36, 40 + i * 42))
+    return canvas.toDataURL('image/png').split(',')[1]
+  }), sections)
+  async function scan() {
+    await page.getByRole('button', { name: /Scan receipt/ }).click()
+    await page.getByLabel('Receipt upload').setInputFiles(photos.map((data, i) => ({
+      name: `synthetic-${i}.png`, mimeType: 'image/png', buffer: Buffer.from(data, 'base64'),
+    })))
+    await page.getByRole('button', { name: 'Read receipt' }).click()
+    await expect(review).toBeVisible({ timeout: 115000 })
+  }
+  const review = page.getByRole('dialog', { name: 'Review shopping receipt' })
+  await scan()
+  const values = (label: string | RegExp) => review.getByLabel(label).evaluateAll(inputs => inputs.map(el => (el as HTMLInputElement).value))
+  expect(await values(/^Product \d+$/)).toEqual(basket.map(p => p.name))
+  expect((await values('Quantity')).map(Number)).toEqual(basket.map(() => 1))
+  for (const label of ['Unit price (€)', 'Line total (€)']) {
+    expect((await values(label)).map(Number)).toEqual(basket.map(p => Number(p.price)))
+  }
+  await expect(review.getByLabel('Total paid (€)')).toHaveValue(String(Number(total)))
+  await expect(review.getByText(/Possible missing or incomplete row.*FADED PRICE/i)).toBeVisible()
+  for (const [index, photo, line] of [[0, 0, 2], [25, 1, 8], [49, 2, 14]]) {
+    const button = review.getByRole('button', { name: `Locate product ${index + 1} on photo ${photo + 1}` })
+    await button.click()
+    const rect = button.locator('..').locator('svg rect')
+    const y = Number(await rect.getAttribute('y'))
+    const h = Number(await rect.getAttribute('height'))
+    // The highlighted band must contain the printed text center.
+    const center = (40 + line * 42 - 10) / (50 + sections[photo].length * 42) * 100
+    expect(y).toBeLessThanOrEqual(center)
+    expect(y + h).toBeGreaterThanOrEqual(center)
+  }
+  const confirm = review.getByRole('button', { name: /Confirm purchase/ })
+  await confirm.click()
+  await expect(review.getByRole('alert')).toContainText('Review each flagged row')
+  async function acknowledge() {
+    for (const box of await review.getByRole('checkbox').all()) await box.check()
+  }
+  await acknowledge()
+  await confirm.evaluate(button => { (button as HTMLElement).click(); (button as HTMLElement).click() })
+  await expect(review).toBeHidden()
+  await page.reload()
+  await scan()
+  await acknowledge()
+  await confirm.click()
+  await expect(review.getByRole('alert')).toContainText('already in Shopping history')
+  const counts = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => k.includes('preview') && localStorage.getItem(k)?.includes('shoppingLists'))!
+    const raw = JSON.parse(localStorage.getItem(key)!)
+    const { shoppingLists, financeMonths } = raw.state ?? raw
+    const lists = shoppingLists.filter((l: { name: string }) => l.name === 'Lidl receipt')
+    const month = financeMonths.find((m: { key: string }) => m.key === '2026-11')
+    const budget = month.budgetItems.find((b: { category: string }) => b.category === 'Shopping')
+    const finance = budget.items.filter((i: { id: string }) => i.id === lists[0]?.financeItemId)
+    return [lists.length, finance.length, finance[0]?.unitPrice]
+  })
+  expect(counts).toEqual([1, 1, Number(total)])
+})

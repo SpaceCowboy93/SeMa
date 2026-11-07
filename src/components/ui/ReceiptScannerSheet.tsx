@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { C2Sheet, C2SheetHeader, C2SheetBody, C2SheetFooter } from './C2Sheet'
 import { prepareReceiptPhoto, scanReceiptPhotos } from '@/lib/receipt-ocr'
+import { photoCanvas } from '@/lib/receipt-image'
 import type { ReceiptResult } from '@/types'
 
 interface Props {
@@ -28,7 +29,7 @@ export function ReceiptScannerSheet({ onClose, onResultReady }: Props) {
     const files = Array.from(input.files ?? [])
     input.value = ''
     if (!files.length || locked.current) return
-    if (files.length + photos.length > 4) { setError('Use up to four photos of one receipt.'); return }
+    if (files.length + photos.length > 8) { setError('Use up to eight photos of one receipt.'); return }
     locked.current = true; setBusy(true); setError(''); setStatus('Preparing photos…')
     try {
       const next: string[] = []
@@ -36,6 +37,17 @@ export function ReceiptScannerSheet({ onClose, onResultReady }: Props) {
       if (alive.current) setPhotos(p => [...p, ...next])
     } catch (e) { if (alive.current) setError(e instanceof Error ? e.message : 'Cannot open this photo.') }
     finally { locked.current = false; if (alive.current) { setBusy(false); setStatus('') } }
+  }
+  async function rotate(index: number) {
+    if (locked.current) return
+    locked.current = true; setBusy(true)
+    try {
+      const canvas = await photoCanvas(photos[index], true)
+      const rotated = canvas.toDataURL('image/jpeg', 0.95)
+      canvas.width = canvas.height = 1
+      if (alive.current) setPhotos(p => p.map((src, i) => i === index ? rotated : src))
+    } catch { if (alive.current) setError('Could not rotate photo.') }
+    finally { locked.current = false; if (alive.current) setBusy(false) }
   }
   async function scan() {
     if (locked.current || !photos.length) return
@@ -50,7 +62,7 @@ export function ReceiptScannerSheet({ onClose, onResultReady }: Props) {
         new Promise<never>((_, reject) => {
           cancelWait = () => reject(new Error('Scan cancelled'))
           abort.signal.addEventListener('abort', cancelWait, { once: true })
-          timer = setTimeout(() => { reject(new Error('Scanning took too long. Try a smaller, clearer photo or enter manually.')); abort.abort() }, 120000)
+          timer = setTimeout(() => { reject(new Error('Scanning took too long. Try a smaller, clearer photo or enter manually.')); abort.abort() }, 120000 * photos.length)
         }),
       ])
       if (alive.current && !abort.signal.aborted) onResultReady(result, photos)
@@ -61,7 +73,7 @@ export function ReceiptScannerSheet({ onClose, onResultReady }: Props) {
     <C2Sheet open fitVisualViewport onClose={close} aria-label="Scan shopping receipt" zIndex={80}>
       <C2SheetHeader title="Scan receipt" subtitle="Free scanning on your phone" onClose={close} />
       <C2SheetBody className="space-y-4">
-        <p className="text-sm text-gray-600">Photograph one receipt on a flat surface in good light. Include the shop, date and total. For long receipts, use up to four photos without overlapping items.</p>
+        <p className="text-sm text-gray-600">Photograph one receipt on a flat surface in good light. Include the shop, date and total. For long receipts, use up to eight photos in top-to-bottom order. Repeat 3–5 complete lines in each new photo and rotate each section upright.</p>
         <p className="text-xs text-gray-500">Photos stay on this device. Only the details you confirm are saved and shared. The first scan downloads the OCR files; keep the app open while scanning.</p>
         <div className="grid grid-cols-2 gap-3">
           <button disabled={busy} onClick={() => camera.current?.click()} className="min-h-12 rounded-2xl bg-[#527052] text-white disabled:opacity-50">Take a photo</button>
@@ -73,6 +85,7 @@ export function ReceiptScannerSheet({ onClose, onResultReady }: Props) {
           {photos.map((src, index) => <div key={index}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={src} alt={`Receipt photo ${index + 1}`} className="w-full h-40 object-contain rounded-xl bg-white" />
+            <button disabled={busy} onClick={() => void rotate(index)} className="min-h-11 w-full text-sm">Rotate photo {index + 1}</button>
             <button disabled={busy} onClick={() => setPhotos(p => p.filter((_, i) => i !== index))} className="min-h-11 w-full text-sm">Remove photo {index + 1}</button>
           </div>)}
         </div>

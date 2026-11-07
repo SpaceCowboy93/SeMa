@@ -1,0 +1,34 @@
+name: Receipt scanner mobile browsers
+on:
+  push:
+    branches: [preview/supabase-v2-isolated]
+    paths:
+      - '.github/workflows/receipt-browser-tests.yml'
+      - 'src/lib/receipt-*.ts'
+      - 'src/components/ui/Receipt*.tsx'
+      - 'tests/e2e/receipt-scanner.spec.ts'
+      - 'playwright.receipts.config.ts'
+permissions:
+  contents: read
+jobs:
+  receipt-scanner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [android-chromium, iphone-webkit]
+    env:
+      CHROMIUM_EXECUTABLE_PATH: /usr/bin/google-chrome
+      NEXT_PUBLIC_SUPABASE_URL: https://wwxdinkdjkjiqzynfbdk.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - if: matrix.browser == 'iphone-webkit'
+        run: npx playwright install --with-deps webkit
+      - run: npx playwright test --config playwright.receipts.config.ts --project ${{ matrix.browser }}

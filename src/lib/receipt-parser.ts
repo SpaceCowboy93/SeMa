@@ -7,7 +7,7 @@ export function validReceiptDate(date: string): boolean {
 }
 
 /** Conservative Irish receipt parser. Unrecognised layouts always remain reviewable. */
-export function parseReceipt(text: string, confidence = 0.5): ReceiptResult {
+export function parseReceipt(text: string, confidence = 0.5, onItemRow?: (row: number, item: ReceiptItem) => void): ReceiptResult {
   const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean)
   const shops = ['Lidl', 'Aldi', 'Tesco', 'Dunnes Stores', 'SuperValu', 'Centra', 'Spar', 'Marks & Spencer']
   const shop = shops.find(s => new RegExp(s === 'Dunnes Stores' ? 'dunnes' : s, 'i').test(text))
@@ -18,16 +18,17 @@ export function parseReceipt(text: string, confidence = 0.5): ReceiptResult {
   const items: ReceiptItem[] = []
   let total: number | undefined
   let previousName = ''
+  let previousRow = -1
   let finished = false
-  for (const line of lines) {
-    const money = line.match(/(-?\d+[.,]\d{2})\s*(?:[A-D*])?\s*$/i)
-    if (/^(?:(?:grand|net)\s+)?total\b|^amount\s+(?:due|paid)\b|^balance\s+due\b/i.test(line) && !/^total\s+(?:saving|discount|vat|tax|items)/i.test(line)) {
+  for (const [row, line] of lines.entries()) {
+    const money = line.match(/(-?\d+[.,]\d{2})(-)?\s*(?:[A-D*])?\s*$/i)
+    if (/^(?:(?:(?:grand|net)\s+)?total(?:\s+(?:paid|due|amount))?|amount\s+(?:due|paid)|balance\s+due)\s*[:€£]?\s*(?:EUR|GBP)?\s*[€£]?\s*(?:-?\d+[.,]\d{2})?$/i.test(line)) {
       if (money) total = amount(money[1])
       finished = true
       continue
     }
     if (finished) continue
-    if (/^(?:sub\s*total|vat|tax|cash|change|card|visa|mastercard|contactless|you saved|total saving|clubcard saving|saving|receipt|tel|www\.|served|store no|transaction|terminal|time|date)\b/i.test(line) || /\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}/.test(line) || shops.some(s => line.toLowerCase().includes(s.split(' ')[0].toLowerCase()))) { previousName = ''; continue }
+    if (/^(?:sub\s*total|vat|tax|cash|change|card|visa|mastercard|contactless|you saved|total saving|saving|receipt|tel|www\.|served|store no|transaction|terminal|time|date)\b/i.test(line) || /\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}/.test(line) || (!money && shops.some(s => line.toLowerCase().includes(s.split(' ')[0].toLowerCase())))) { previousName = ''; continue }
     // Quantity can follow the product on its own line, or prefix its name.
     const qtyLine = line.match(/^(\d+(?:[.,]\d+)?)\s*(?:kg\s*)?[x×@]\s*€?\s*(\d+[.,]\d{2})(?:\s+€?\s*(\d+[.,]\d{2}))?\s*$/i)
     if (qtyLine) {
@@ -35,14 +36,17 @@ export function parseReceipt(text: string, confidence = 0.5): ReceiptResult {
       const last = items[items.length - 1]
       if (previousName || last) {
         const item = previousName ? { id: `ocr-${items.length}`, name: previousName, quantity: q, unitPrice: p, lineTotal: 0, confidence } : last
-        item.quantity = q; item.unitPrice = p; item.lineTotal = qtyLine[3] ? amount(qtyLine[3]) : roundMoney(q * p)
-        if (previousName) items.push(item)
+        item.quantity = q; item.unitPrice = p
+        if (qtyLine[3] || previousName) item.lineTotal = qtyLine[3] ? amount(qtyLine[3]) : roundMoney(q * p)
+        if (previousName) { items.push(item); onItemRow?.(previousRow, item) }
+        onItemRow?.(row, item)
       }
       previousName = ''; continue
     }
-    if (!money) { previousName = /[a-z]/i.test(line) ? line : ''; continue }
+    if (!money) { previousRow = row; previousName = /[a-z]/i.test(line) ? line : ''; continue }
     let name = line.slice(0, money.index).replace(/[€\s]+$/, '').replace(/^\d{5,}\s+/, '').trim()
-    if (!name && previousName) name = previousName
+    const usesPrevious = !name && Boolean(previousName)
+    if (usesPrevious) name = previousName
     previousName = ''
     if (!/[a-z]/i.test(name)) continue
     let quantity = 1
@@ -51,8 +55,12 @@ export function parseReceipt(text: string, confidence = 0.5): ReceiptResult {
     if (prefix) { quantity = amount(prefix[1]); name = prefix[2] }
     const suffix = name.match(/^(.+?)\s+(\d+(?:[.,]\d+)?)\s*(?:kg\s*)?[x×@]\s*€?\s*(\d+[.,]\d{2})$/i)
     if (suffix) { name = suffix[1]; quantity = amount(suffix[2]); unitPrice = amount(suffix[3]) }
-    const lineTotal = amount(money[1])
+    const printed = amount(money[1])
+    const deduction = /^(?:discount|coupon|voucher|(?:deposit )?refund|(?:multi[- ]?buy|clubcard) (?:saving|discount))\b/i.test(name)
+    const lineTotal = money[2] || deduction ? -Math.abs(printed) : printed
     items.push({ id: `ocr-${items.length}`, name, quantity, unitPrice: unitPrice ?? roundMoney(lineTotal / quantity), lineTotal, confidence })
+    if (usesPrevious) onItemRow?.(previousRow, items[items.length - 1])
+    onItemRow?.(row, items[items.length - 1])
   }
   const subtotal = roundMoney(items.reduce((sum, item) => sum + item.lineTotal, 0))
   return { store: shop ?? lines.find(s => /[a-z]{3}/i.test(s) && !/receipt|welcome|thank/i.test(s)) ?? '', date, currency: /£|\bGBP\b/.test(text) ? 'GBP' : 'EUR', items, subtotal, tax: 0, grandTotal: total ?? 0 }
