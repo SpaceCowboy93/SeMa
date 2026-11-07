@@ -147,3 +147,44 @@ test('50 synthetic products across three overlapping photos, plus an unreadable 
   })
   expect(counts).toEqual([1, 1, Number(total)])
 })
+
+test('weighted goods, savings, deposits and a refund require review for a one-cent difference', async ({ page }) => {
+  await page.goto('/dev-preview/shopping')
+  const data = await page.evaluate(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 900; canvas.height = 550
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = 'white'; ctx.fillRect(0, 0, 900, 550)
+    ctx.fillStyle = 'black'; ctx.font = 'bold 30px monospace'
+    const lines = ['TESCO', '04/11/2026', 'APPLES 0.5 kg @ 2.00 1.00', 'BREAD 4.00',
+      'MULTIBUY SAVING 0.80', 'DEPOSIT 0.30', 'DEPOSIT REFUND 0.15', 'TOTAL EUR 4.36']
+    lines.forEach((line, i) => ctx.fillText(line, 30, 55 + i * 52))
+    return canvas.toDataURL('image/png').split(',')[1]
+  })
+  await page.getByRole('button', { name: /Scan receipt/ }).click()
+  await page.getByLabel('Receipt upload').setInputFiles({ name: 'synthetic-finances.png', mimeType: 'image/png', buffer: Buffer.from(data, 'base64') })
+  await page.getByRole('button', { name: 'Read receipt' }).click()
+  const review = page.getByRole('dialog', { name: 'Review shopping receipt' })
+  await expect(review).toBeVisible({ timeout: 90000 })
+  await expect(review.getByLabel('Quantity').first()).toHaveValue('0.5')
+  const totals = await review.getByLabel('Line total (€)').evaluateAll(inputs => inputs.map(el => Number((el as HTMLInputElement).value)))
+  expect(totals).toEqual([1, 4, -0.8, 0.3, -0.15])
+  await expect(review.getByText(/Items and total differ by €0.01/)).toBeVisible()
+  const confirm = review.getByRole('button', { name: /Confirm purchase/ })
+  for (const box of await review.getByRole('checkbox').all()) await box.check()
+  await review.getByLabel('Unit price (€)').nth(1).fill('4.02')
+  const accepted = review.getByRole('checkbox', { name: /checked these differences/ })
+  await expect(accepted).not.toBeChecked()
+  await confirm.click()
+  await expect(review.getByRole('alert')).toContainText('Review each flagged row')
+  await accepted.check()
+  await confirm.click()
+  await expect(review).toBeHidden()
+  const paid = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => k.includes('preview') && localStorage.getItem(k)?.includes('shoppingLists'))!
+    const { financeMonths } = JSON.parse(localStorage.getItem(key)!)
+    const month = financeMonths.find((m: { key: string }) => m.key === '2026-11')
+    return month.budgetItems.find((b: { category: string }) => b.category === 'Shopping').items.map((i: { unitPrice: number }) => i.unitPrice)
+  })
+  expect(paid).toEqual([4.36])
+})

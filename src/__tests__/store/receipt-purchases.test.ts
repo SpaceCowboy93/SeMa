@@ -47,6 +47,14 @@ describe('confirmed receipt purchases', () => {
     useAppStore.getState().confirmReceipt(receipt, fingerprint)
     expect(category().actual).toBe(3.5)
   })
+  it('keeps receipt spending separate from personal spending with the same bag icon', () => {
+    useAppStore.getState().createFinanceMonth('2026-10')
+    const personal = { id: 'personal', category: 'Other / Personal', emoji: '🛍️', planned: 200, actual: 130 }
+    useAppStore.getState().updateFinanceMonth('2026-10', { budgetItems: [personal] })
+    useAppStore.getState().confirmReceipt(receipt, fingerprint)
+    expect(category().actual).toBe(3.5)
+    expect(useAppStore.getState().financeMonths[0].budgetItems[0]).toEqual(personal)
+  })
   it('merges equal-price concurrent receipts without losing their spending', () => {
     useAppStore.getState().createFinanceMonth('2026-10')
     const base = snapshot()

@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/receipt-browser-tests.yml'
       - 'src/lib/receipt-*.ts'
+      - 'src/store/useAppStore.ts'
       - 'src/components/ui/Receipt*.tsx'
       - 'tests/e2e/receipt-scanner.spec.ts'
       - 'playwright.receipts.config.ts'
@@ -32,3 +33,5 @@ jobs:
       - if: matrix.browser == 'iphone-webkit'
         run: npx playwright install --with-deps webkit
       - run: npx playwright test --config playwright.receipts.config.ts --project ${{ matrix.browser }}
+      - if: matrix.browser == 'android-chromium'
+        run: npm run build

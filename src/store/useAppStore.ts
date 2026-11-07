@@ -219,10 +219,12 @@ function applyShoppingFinanceSync(
   const listCost = (l: ShoppingList) =>
     l.receipt?.grandTotal ?? l.items.reduce((s, i) => s + (i.price ?? 0) * i.quantity, 0)
 
-  const findShoppingLoc = (months: FinanceMonth[], key: string) => {
+  const findShoppingLoc = (months: FinanceMonth[], key: string, linkedId?: string) => {
     const mi = months.findIndex(m => m.key === key)
     if (mi === -1) return null
-    const bi = months[mi].budgetItems.findIndex(b => b.category === 'Shopping' || b.emoji === '🛍️')
+    const budget = months[mi].budgetItems
+    const bi = linkedId ? budget.findIndex(b => b.items?.some(i => i.id === linkedId))
+      : budget.findIndex(b => b.category === 'Shopping' || (!newList.receipt && b.emoji === '🛍️'))
     if (bi === -1) return null
     return { mi, bi }
   }
@@ -237,7 +239,7 @@ function applyShoppingFinanceSync(
   }
 
   const removeFinItem = (months: FinanceMonth[], key: string, itemId: string) => {
-    const loc = findShoppingLoc(months, key)
+    const loc = findShoppingLoc(months, key, itemId)
     if (!loc) return { months, oldContrib: 0 }
     const b = months[loc.mi].budgetItems[loc.bi]
     const linked = b.items?.find(i => i.id === itemId)
@@ -315,7 +317,7 @@ function applyShoppingFinanceSync(
     }
 
     // Same month — update in-place
-    const loc = findShoppingLoc(financeMonths, oldList.financeMonthKey)
+    const loc = findShoppingLoc(financeMonths, oldList.financeMonthKey, oldList.financeItemId)
     if (!loc) return { financeMonths, listPatch: {} }
     const b = financeMonths[loc.mi].budgetItems[loc.bi]
     const linked = b.items?.find(i => i.id === oldList.financeItemId)
@@ -887,7 +889,7 @@ export const useAppStore = create<AppState>()(
         // Existing couple_state synchronization persists both collections in one snapshot.
         // Restore a removed Shopping category only in the receipt's target month.
         const monthKey = receipt.date.slice(0, 7)
-        const months = state.financeMonths.map(m => m.key !== monthKey || m.budgetItems.some(b => b.category === 'Shopping' || b.emoji === '🛍️') ? m : {
+        const months = state.financeMonths.map(m => m.key !== monthKey || m.budgetItems.some(b => b.category === 'Shopping') ? m : {
           ...m, budgetItems: [...m.budgetItems, { id: 'receipt-shopping', category: 'Shopping', emoji: '🛍️', planned: 0, actual: 0 }],
         })
         const { financeMonths, listPatch } = applyShoppingFinanceSync(months, { ...list, isCompleted: false }, list, now)
