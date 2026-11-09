@@ -52,6 +52,10 @@ Browser timing evidence is also recorded in [receipt-engine-comparison.json](rec
 
 During verification, a jsdom/Node abort-signal mismatch and a test-only Testing Library option were fixed. An initial simultaneous dev/build run collided in `.next`; final browser and build checks were run sequentially. A WebKit checkbox stability timeout was resolved by exercising keyboard focus/activation after the item edit; the final eight-test suite passed.
 
+The first expanded CI run exposed that the job's browser-only V2 URL was also being inherited by legacy-cache unit fixtures. The unit step now starts with neutral public backend settings; V2-specific tests select V2 themselves. Browser tests and builds still inherit the exact isolated V2 endpoint. No recovery tests were disabled or application cache behavior changed.
+
+Preview deployment of scanner commit `0ddeb0a` reached READY. Its authenticated `/shopping` response returned HTTP 200 with title SeMa. A fresh browser reaches Vercel Deployment Protection, so authenticated live scanner interaction remains unverified; sign into Vercel on the Preview link, then into SeMa, and open Shopping → Scan receipt. All scanner interactions above were verified using isolated local browser fixtures, without live purchases. The environment-variable pull for a browser OIDC check was rejected by automatic approval review because it could copy secrets locally; it was not performed. Authenticated HTTP verification succeeded without it.
+
 **Mock Gemini results:** shared transcription fixture produces 50/50 known items, zero missed known rows, zero duplicates, total €148.00 and an unresolved FADED PRICE warning. The balanced case produces one known item, €2.00 and a warning for the omitted physical band. Route tests mock only Supabase/Google boundaries; component tests mock the cloud scanner to verify successful replacement, quota failure and cancellation. These are not Gemini API accuracy or scan-time results.
 
 **Real Gemini API results:** not run — no Preview key, Google project ID, project-specific quota evidence or billing-disabled verification available. No Gemini scan duration is claimed.

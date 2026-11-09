@@ -35,6 +35,11 @@ jobs:
       - run: npm ci
       - if: matrix.browser == 'android-chromium'
         run: npm run typecheck && npm run lint && npm test
+        # Unit fixtures select their own cache/backend generation. Inheriting
+        # the browser's V2 URL changes legacy-recovery fixture semantics.
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ''
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ''
       - if: matrix.browser == 'iphone-webkit'
         run: npx playwright install --with-deps webkit
       - run: npx playwright test --config playwright.receipts.config.ts --project ${{ matrix.browser }}
