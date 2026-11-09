@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './tests/e2e', testMatch: 'receipt-scanner.spec.ts', workers: 1,
   reporter: 'list', timeout: 120000,
-  use: { baseURL: 'http://localhost:3100', screenshot: 'only-on-failure' },
+  use: { baseURL: 'http://localhost:3100', screenshot: 'only-on-failure', contextOptions: { reducedMotion: 'reduce' } },
   projects: [
     { name: 'android-chromium', use: { ...devices['Pixel 7'], launchOptions: { executablePath: process.env.CHROMIUM_EXECUTABLE_PATH || undefined } } },
     { name: 'iphone-webkit', use: { ...devices['iPhone 13'] } },

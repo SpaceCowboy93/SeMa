@@ -5,9 +5,12 @@ on:
     paths:
       - '.github/workflows/receipt-browser-tests.yml'
       - 'src/lib/receipt-*.ts'
+      - 'src/lib/supabase-server.ts'
+      - 'src/app/api/receipts/scan/route.ts'
       - 'src/store/useAppStore.ts'
       - 'src/components/ui/Receipt*.tsx'
       - 'tests/e2e/receipt-scanner.spec.ts'
+      - 'tests/fixtures/receiptComparison.ts'
       - 'playwright.receipts.config.ts'
 permissions:
   contents: read
@@ -30,6 +33,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - if: matrix.browser == 'android-chromium'
+        run: npm run typecheck && npm run lint && npm test
       - if: matrix.browser == 'iphone-webkit'
         run: npx playwright install --with-deps webkit
       - run: npx playwright test --config playwright.receipts.config.ts --project ${{ matrix.browser }}

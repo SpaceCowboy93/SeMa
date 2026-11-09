@@ -7,6 +7,7 @@ import { ReceiptRowPreview } from './ReceiptRowPreview'
 import { generateId } from '@/lib/utils'
 import { roundMoney, validateReceipt } from '@/lib/receipt-parser'
 import { C2Sheet, C2SheetHeader, C2SheetBody, C2SheetFooter } from './C2Sheet'
+import { ReceiptScannerSheet } from './ReceiptScannerSheet'
 
 interface Props {
   result: ScanResult | null
@@ -16,14 +17,20 @@ interface Props {
 }
 const newItem = (): ReceiptItem => ({ id: generateId(), name: '', quantity: 1, unitPrice: 0, lineTotal: 0 })
 const inputClass = 'w-full min-w-0 min-h-11 rounded-xl bg-white border border-gray-200 px-3 text-base'
+const details = (result: ScanResult | null): ReceiptResult => ({
+  store: result?.store ?? '', date: result?.date ?? '', currency: result?.currency ?? 'EUR',
+  items: result?.items ?? [newItem()], subtotal: result?.subtotal ?? 0,
+  tax: result?.tax ?? 0, grandTotal: result?.grandTotal ?? 0,
+})
 
-export function ReceiptReviewSheet({ result, photos, onClose, onSave }: Props) {
-  const evidence = result?.evidence
-  const [receipt, setReceipt] = useState<ReceiptResult>(() => ({
-    store: result?.store ?? '', date: result?.date ?? '', currency: result?.currency ?? 'EUR',
-    items: result?.items ?? [newItem()], subtotal: result?.subtotal ?? 0,
-    tax: result?.tax ?? 0, grandTotal: result?.grandTotal ?? 0,
-  }))
+export function ReceiptReviewSheet({ result, photos: initialPhotos, onClose, onSave }: Props) {
+  const [photos, setPhotos] = useState(initialPhotos)
+  const [candidatePhotos, setCandidatePhotos] = useState<string[]>([])
+  const [source, setSource] = useState(result)
+  const evidence = source?.evidence
+  const [receipt, setReceipt] = useState<ReceiptResult>(() => details(result))
+  const [retrying, setRetrying] = useState(false)
+  const [candidate, setCandidate] = useState<ScanResult | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState('')
@@ -54,11 +61,21 @@ export function ReceiptReviewSheet({ result, photos, onClose, onSave }: Props) {
     finally { lock.current = false; setSaving(false) }
   }
   const subtotal = roundMoney(receipt.items.reduce((sum, item) => sum + item.lineTotal, 0))
+  // This component stays mounted while retrying, retaining the full edited draft,
+  // row acknowledgements and financial review until explicit replacement.
+  if (retrying) return <ReceiptScannerSheet initialPhotos={photos} onClose={() => setRetrying(false)} onResultReady={(next, nextPhotos) => { setCandidate(next); setCandidatePhotos(nextPhotos); setRetrying(false) }} />
   return (
     <C2Sheet open fitVisualViewport onClose={() => { if (!lock.current) onClose() }} aria-label="Review shopping receipt" zIndex={80}>
       <C2SheetHeader title="Review receipt" subtitle="Check each field before saving" onClose={() => { if (!lock.current) onClose() }} />
       <C2SheetBody className="space-y-4">
         <p className="text-sm text-gray-600">OCR can miss items, discounts and quantities. Compare with your receipt. The confirmed total below is the amount added to Shopping in Finances.</p>
+        {source?.engine && <p className="text-xs text-gray-500">{source.engine === 'tesseract' ? 'On-device · Tesseract' : 'Cloud · Gemini'}{source.elapsedMs !== undefined && ` · ${(source.elapsedMs / 1000).toFixed(1)} seconds`}</p>}
+        {photos.length > 0 && <button disabled={saving} className="min-h-12 w-full rounded-xl border border-gray-300 text-sm" onClick={() => { setCandidate(null); setRetrying(true) }}>Retry these photos with another engine</button>}
+        {candidate && <div className="rounded-xl bg-amber-50 p-3 space-y-2">
+          <p className="text-sm">New scan: {candidate.items.length} products{candidate.elapsedMs !== undefined && ` in ${(candidate.elapsedMs / 1000).toFixed(1)} seconds`}. Your reviewed details and edits are still kept. Replace them only if you want to use this scan.</p>
+          <button className="min-h-12 w-full rounded-xl border border-gray-300" onClick={() => setCandidate(null)}>Keep my reviewed details</button>
+          <button className="min-h-12 w-full rounded-xl bg-[#527052] text-white" onClick={() => { setReceipt(details(candidate)); setPhotos(candidatePhotos); setSource(candidate); setCandidate(null); setReviewed([]); setAcceptedReceipt(undefined); setSelected(''); setError('') }}>Replace reviewed details with this scan</button>
+        </div>}
         {photos.length > 0 && <details><summary className="min-h-11 text-sm">View receipt photos</summary>{photos.map((src, index) =>
           // eslint-disable-next-line @next/next/no-img-element
           <img key={index} src={src} alt={`Original receipt ${index + 1}`} className="w-full rounded-xl mb-2" />)}</details>}

@@ -14,7 +14,8 @@ const patterns = [
   ['AWS access key', /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g],
   ['Private key', /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g],
   ['Provider token', /\b(?:sk_live_|sk_test_|sk-proj-|sk-ant-)[A-Za-z0-9_-]{20,}/g],
-  ['Literal secret assignment', /(?:SUPABASE_SERVICE_ROLE_KEY|VAPID_PRIVATE_KEY|PUSH_SEND_SECRET|CRON_SECRET|GITHUB_TOKEN|VERCEL_TOKEN|AWS_SECRET_ACCESS_KEY)\s*[:=]\s*["']([A-Za-z0-9_./+=-]{24,})["']/g],
+  ['Google API key', /\bAIza[A-Za-z0-9_-]{35}\b/g],
+  ['Literal secret assignment', /(?:GEMINI_API_KEY|SUPABASE_SERVICE_ROLE_KEY|VAPID_PRIVATE_KEY|PUSH_SEND_SECRET|CRON_SECRET|GITHUB_TOKEN|VERCEL_TOKEN|AWS_SECRET_ACCESS_KEY)\s*[:=]\s*["']([A-Za-z0-9_./+=-]{24,})["']/g],
   ['Credential in URL', /[a-z][a-z0-9+.-]*:\/\/[^\s:/]+:[^\s@/]{12,}@/gi],
 ]
 const findings = []

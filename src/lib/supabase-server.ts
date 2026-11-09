@@ -15,6 +15,14 @@ function getServerSupabaseClient(token: string) {
   })
 }
 
+/** Atomic database limiter: survives cold starts and concurrent Vercel instances. */
+export async function consumeReceiptScan(request: Request): Promise<boolean> {
+  const token = (request.headers.get('authorization') ?? '').slice('Bearer '.length).trim()
+  const { data, error } = await getServerSupabaseClient(token).rpc('consume_receipt_scan')
+  if (error || typeof data !== 'boolean') throw new AccessError(503, 'Cloud rate limiting is unavailable. Use on-device scanning with these photos.')
+  return data
+}
+
 /** Verifies a bearer access token against Supabase Auth for API routes. */
 export async function requireCoupleMember(request: Request): Promise<CoupleAccess> {
   const authorization = request.headers.get('authorization') ?? ''

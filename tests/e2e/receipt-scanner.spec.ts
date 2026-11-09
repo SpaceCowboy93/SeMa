@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { comparisonBasket, comparisonSections, comparisonTotal, unreadableSections } from '../fixtures/receiptComparison'
 
 test('local OCR → correction → history and finance → duplicate guard', async ({ page }) => {
   test.setTimeout(120000)
@@ -66,22 +67,12 @@ test('local OCR → correction → history and finance → duplicate guard', asy
   expect(errors).toEqual([])
 })
 
-test('50 synthetic products across three overlapping photos, plus an unreadable row', async ({ page }) => {
+test('50 synthetic products across three overlapping photos, plus an unreadable row', async ({ page }, testInfo) => {
   test.setTimeout(240000)
   await page.goto('/dev-preview/shopping')
-  const names = ['MILK', 'BREAD', 'BUTTER', 'HONEY', 'CARROTS', 'APPLES', 'BEANS', 'PASTA', 'RICE', 'PEARS']
-  const basket = Array.from({ length: 50 }, (_, i) => ({
-    name: names[i % names.length], price: (1 + Math.floor(i / 10)).toFixed(2),
-  }))
-  // A purchase in the shared region also occurs immediately beyond it.
-  for (const i of [19, 20, 21]) basket[i] = { name: 'MILK', price: '2.00' }
-  const lines = basket.map(item => item.name.padEnd(18) + item.price)
-  const total = basket.reduce((sum, item) => sum + Number(item.price), 0).toFixed(2)
-  const sections = [
-    ['LIDL', '04/11/2026', ...lines.slice(0, 21)],
-    lines.slice(17, 39),
-    [...lines.slice(35), 'FADED PRICE', 'TOTAL EUR'.padEnd(18) + total],
-  ]
+  const basket = comparisonBasket
+  const total = comparisonTotal
+  const sections = comparisonSections
   const photos = await page.evaluate(parts => parts.map(lines => {
     const canvas = document.createElement('canvas')
     canvas.width = 720
@@ -110,6 +101,10 @@ test('50 synthetic products across three overlapping photos, plus an unreadable 
   }
   await expect(review.getByLabel('Total paid (€)')).toHaveValue(String(Number(total)))
   await expect(review.getByText(/Possible missing or incomplete row.*FADED PRICE/i)).toBeVisible()
+  const timing = await review.getByText(/On-device · Tesseract ·/).textContent()
+  const metrics = { engine: 'tesseract', browser: testInfo.project.name, fixture: 'three-photo-50-item-plus-unreadable', expected: 50, actual: (await values(/^Product \d+$/)).length, missed: 0, duplicated: 0, expectedTotal: total, actualTotal: Number(await review.getByLabel('Total paid (€)').inputValue()), timing, source: 'real browser Tesseract', unreadablePriceInvented: false }
+  console.log('RECEIPT_BENCHMARK', JSON.stringify(metrics))
+  await testInfo.attach('receipt-comparison.json', { body: JSON.stringify(metrics, null, 2), contentType: 'application/json' })
   for (const [index, photo, line] of [[0, 0, 2], [25, 1, 8], [49, 2, 14]]) {
     const button = review.getByRole('button', { name: `Locate product ${index + 1} on photo ${photo + 1}` })
     await button.click()
@@ -148,6 +143,51 @@ test('50 synthetic products across three overlapping photos, plus an unreadable 
   expect(counts).toEqual([1, 1, Number(total)])
 })
 
+test('balanced total still flags an unreadable price; failed cloud retry keeps edited draft and photos', async ({ page }, testInfo) => {
+  await page.goto('/dev-preview/shopping')
+  const data = await page.evaluate(lines => {
+    const c = document.createElement('canvas'); c.width = 720; c.height = 350
+    const ctx = c.getContext('2d')!; ctx.fillStyle = 'white'; ctx.fillRect(0, 0, c.width, c.height)
+    ctx.fillStyle = 'black'; ctx.font = 'bold 28px monospace'
+    lines.forEach((line, i) => ctx.fillText(line, 36, 45 + i * 52))
+    return c.toDataURL('image/png').split(',')[1]
+  }, unreadableSections[0])
+  let cloudRequests = 0
+  page.on('request', r => { if (r.url().includes('/api/receipts/scan')) cloudRequests++ })
+  await page.getByRole('button', { name: /Scan receipt/ }).click()
+  await expect(page.getByRole('radio', { name: 'On-device · Tesseract' })).toBeChecked()
+  await page.getByLabel('Receipt upload').setInputFiles({ name: 'balanced-unreadable.png', mimeType: 'image/png', buffer: Buffer.from(data, 'base64') })
+  await page.getByRole('button', { name: 'Read receipt' }).click()
+  const review = page.getByRole('dialog', { name: 'Review shopping receipt' })
+  await expect(review).toBeVisible({ timeout: 90000 })
+  await expect(review.getByLabel('Product 1', { exact: true })).toHaveValue('BEANS')
+  await expect(review.getByLabel('Total paid (€)')).toHaveValue('2')
+  await expect(review.getByText(/Possible missing or incomplete row.*FADED PRICE/i)).toBeVisible()
+  expect(await review.getByLabel(/^Product \d+$/).count()).toBe(1)
+  const metrics = { engine: 'tesseract', browser: testInfo.project.name, fixture: 'balanced-unreadable-price', expectedReadable: 1, actual: 1, expectedUnresolved: 1, flaggedUnresolved: 1, missedReadable: 0, duplicated: 0, total: 2, timing: await review.getByText(/On-device · Tesseract ·/).textContent(), source: 'real browser Tesseract' }
+  console.log('RECEIPT_BENCHMARK', JSON.stringify(metrics))
+  await testInfo.attach('balanced-unreadable.json', { body: JSON.stringify(metrics, null, 2), contentType: 'application/json' })
+  await review.getByLabel('Product 1', { exact: true }).fill('My corrected beans')
+  await review.getByRole('button', { name: /Retry these photos/ }).click()
+  const scan = page.getByRole('dialog', { name: 'Scan shopping receipt' })
+  await expect(scan.getByRole('radio', { name: 'On-device · Tesseract' })).toBeChecked()
+  await scan.getByRole('radio', { name: 'Cloud · Gemini' }).click()
+  await expect(scan.getByText(/selected photos will be sent to Google/)).toBeVisible()
+  expect(cloudRequests).toBe(0)
+  await scan.getByRole('button', { name: 'Scan with Gemini' }).click()
+  // Isolated dev fixtures deliberately have no auth. This is a real signed-out
+  // failure, not a fake successful Gemini result or a live account request.
+  await expect(scan.getByRole('alert')).toContainText('Please sign in to SeMa')
+  expect(cloudRequests).toBe(0)
+  await expect(scan.getByRole('img', { name: 'Receipt photo 1' })).toBeVisible()
+  await scan.getByRole('button', { name: 'Use on-device scanning with these photos' }).click()
+  await expect(scan.getByRole('radio', { name: 'On-device · Tesseract' })).toBeChecked()
+  await scan.getByRole('button', { name: 'Close', exact: true }).click()
+  await expect(review.getByLabel('Product 1', { exact: true })).toHaveValue('My corrected beans')
+  await review.getByRole('button', { name: /Confirm purchase/ }).click()
+  await expect(review.getByRole('alert')).toContainText('Review each flagged row')
+})
+
 test('weighted goods, savings, deposits and a refund require review for a one-cent difference', async ({ page }) => {
   await page.goto('/dev-preview/shopping')
   const data = await page.evaluate(() => {
@@ -177,7 +217,11 @@ test('weighted goods, savings, deposits and a refund require review for a one-ce
   await expect(accepted).not.toBeChecked()
   await confirm.click()
   await expect(review.getByRole('alert')).toContainText('Review each flagged row')
-  await accepted.check()
+  // Keyboard activation also verifies the acknowledgement remains reachable
+  // after editing a row above the scrollable phone-sheet footer.
+  await accepted.focus()
+  await accepted.press('Space')
+  await expect(accepted).toBeChecked()
   await confirm.click()
   await expect(review).toBeHidden()
   const paid = await page.evaluate(() => {

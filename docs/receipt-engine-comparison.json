@@ -1,0 +1,90 @@
+{
+    "date":  "2026-11-09",
+    "repository":  "SpaceCowboy93/SeMa",
+    "branch":  "preview/supabase-v2-isolated",
+    "environment":  "local browser emulation with synthetic images",
+    "browsersPassed":  8,
+    "browsersFailed":  0,
+    "realTesseract":  [
+                          {
+                              "engine":  "tesseract",
+                              "browser":  "android-chromium",
+                              "fixture":  "three-photo-50-item-plus-unreadable",
+                              "expected":  50,
+                              "actual":  50,
+                              "missed":  0,
+                              "duplicated":  0,
+                              "expectedTotal":  148,
+                              "actualTotal":  148,
+                              "timing":  "On-device · Tesseract · 5.9 seconds",
+                              "source":  "real browser Tesseract",
+                              "unreadablePriceInvented":  false
+                          },
+                          {
+                              "engine":  "tesseract",
+                              "browser":  "android-chromium",
+                              "fixture":  "balanced-unreadable-price",
+                              "expectedReadable":  1,
+                              "actual":  1,
+                              "expectedUnresolved":  1,
+                              "flaggedUnresolved":  1,
+                              "missedReadable":  0,
+                              "duplicated":  0,
+                              "total":  2,
+                              "timing":  "On-device · Tesseract · 4.1 seconds",
+                              "source":  "real browser Tesseract"
+                          },
+                          {
+                              "engine":  "tesseract",
+                              "browser":  "iphone-webkit",
+                              "fixture":  "three-photo-50-item-plus-unreadable",
+                              "expected":  50,
+                              "actual":  50,
+                              "missed":  0,
+                              "duplicated":  0,
+                              "expectedTotal":  148,
+                              "actualTotal":  148,
+                              "timing":  "On-device · Tesseract · 8.2 seconds",
+                              "source":  "real browser Tesseract",
+                              "unreadablePriceInvented":  false
+                          },
+                          {
+                              "engine":  "tesseract",
+                              "browser":  "iphone-webkit",
+                              "fixture":  "balanced-unreadable-price",
+                              "expectedReadable":  1,
+                              "actual":  1,
+                              "expectedUnresolved":  1,
+                              "flaggedUnresolved":  1,
+                              "missedReadable":  0,
+                              "duplicated":  0,
+                              "total":  2,
+                              "timing":  "On-device · Tesseract · 2.5 seconds",
+                              "source":  "real browser Tesseract"
+                          }
+                      ],
+    "geminiMock":  {
+                       "fiftyItems":  {
+                                          "expected":  50,
+                                          "actual":  50,
+                                          "missed":  0,
+                                          "duplicated":  0,
+                                          "total":  148,
+                                          "unresolvedRowsFlagged":  1
+                                      },
+                       "balancedUnreadable":  {
+                                                  "expectedReadable":  1,
+                                                  "actualReadable":  1,
+                                                  "unresolvedRowsFlagged":  1,
+                                                  "total":  2
+                                              },
+                       "apiTiming":  null
+                   },
+    "geminiReal":  {
+                       "status":  "not run",
+                       "reason":  "No Preview key or project-specific quota/billing-disabled evidence; user requested continuing without key",
+                       "items":  null,
+                       "total":  null,
+                       "scanTime":  null
+                   }
+}

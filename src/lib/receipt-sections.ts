@@ -7,7 +7,7 @@ export interface ScanEvidence {
   positions: Record<string, Position>
   warnings: { message: string; position: Position; text?: string }[]
 }
-export type ScanResult = ReceiptResult & { evidence?: ScanEvidence }
+export type ScanResult = ReceiptResult & { evidence?: ScanEvidence; engine?: 'tesseract' | 'gemini'; elapsedMs?: number }
 
 const normalized = (s: string) => s.toLowerCase().replace(/[^\p{L}\d-]+/gu, ' ').trim()
 

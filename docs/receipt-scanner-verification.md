@@ -1,5 +1,7 @@
 # Free shopping receipt scanner — 4 November 2026
 
+Historical implementation report. Current status, the engine switch, benchmarks and Preview setup are tracked in [receipt-engine-switch-verification.md](receipt-engine-switch-verification.md).
+
 ## Architecture and implementation
 
 Source: `SpaceCowboy93/SeMa`, based on `preview/supabase-v2-isolated` at `ba70ea8`. `main` contains only the isolated-preview placeholder. This change does not target `SpaceCowboy93/sema-calendar` or Production.

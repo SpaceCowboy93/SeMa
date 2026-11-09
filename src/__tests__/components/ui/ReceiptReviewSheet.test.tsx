@@ -2,8 +2,48 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import { ReceiptReviewSheet } from '@/components/ui/ReceiptReviewSheet'
 import type { ReceiptResult } from '@/types'
+import { scanReceiptWithGemini } from '@/lib/receipt-cloud-client'
+vi.mock('@/lib/receipt-cloud-client', () => ({ scanReceiptWithGemini: vi.fn() }))
 const receipt: ReceiptResult = { store: 'Tesco', date: '2026-11-04', currency: 'EUR', items: [{ id: '1', name: 'Milk', quantity: 2, unitPrice: 2, lineTotal: 4 }], subtotal: 4, tax: 0, grandTotal: 3.5 }
 describe('receipt review', () => {
+  it('keeps manual edits through successful retries until explicit replacement', async () => {
+    const save = vi.fn()
+    vi.mocked(scanReceiptWithGemini).mockResolvedValue({ ...receipt, items: [{ ...receipt.items[0], name: 'New scan milk' }] })
+    render(<ReceiptReviewSheet result={{ ...receipt, engine: 'tesseract' }} photos={['photo']} onClose={vi.fn()} onSave={save} />)
+    fireEvent.change(screen.getByLabelText('Product 1'), { target: { value: 'My corrected milk' } })
+    fireEvent.click(screen.getByRole('button', { name: /Retry these photos/ }))
+    expect(screen.getByRole('img', { name: 'Receipt photo 1' })).toBeVisible()
+    fireEvent.click(screen.getByRole('radio', { name: 'Cloud · Gemini' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Scan with Gemini' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Keep my reviewed details' })).toBeVisible())
+    expect(screen.getByLabelText('Product 1')).toHaveValue('My corrected milk')
+    expect(save).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Keep my reviewed details' }))
+    fireEvent.click(screen.getByRole('button', { name: /Retry these photos/ }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Cloud · Gemini' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Scan with Gemini' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Replace reviewed details with this scan' })).toBeVisible())
+    fireEvent.click(screen.getByRole('button', { name: 'Replace reviewed details with this scan' }))
+    expect(screen.getByLabelText('Product 1')).toHaveValue('New scan milk')
+    expect(screen.getByLabelText('Total paid (€)')).toHaveValue(3.5)
+    expect(save).not.toHaveBeenCalled()
+  })
+  it('keeps the edited draft after a failed or cancelled retry without saving', async () => {
+    const save = vi.fn()
+    vi.mocked(scanReceiptWithGemini).mockRejectedValue(new Error('Gemini free quota exhausted'))
+    render(<ReceiptReviewSheet result={receipt} photos={['photo']} onClose={vi.fn()} onSave={save} />)
+    fireEvent.change(screen.getByLabelText('Product 1'), { target: { value: 'Edited milk' } })
+    fireEvent.click(screen.getByRole('button', { name: /Retry these photos/ }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Cloud · Gemini' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Scan with Gemini' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('quota exhausted'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.getByLabelText('Product 1')).toHaveValue('Edited milk')
+    fireEvent.click(screen.getByRole('button', { name: /Retry these photos/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.getByLabelText('Product 1')).toHaveValue('Edited milk')
+    expect(save).not.toHaveBeenCalled()
+  })
   it('keeps the printed total after correcting an item and saves once', async () => {
     const save = vi.fn().mockResolvedValue(undefined)
     render(<ReceiptReviewSheet result={receipt} photos={[]} onClose={vi.fn()} onSave={save} />)

@@ -2,9 +2,36 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ReceiptScannerSheet } from '@/components/ui/ReceiptScannerSheet'
 import { prepareReceiptPhoto, scanReceiptPhotos } from '@/lib/receipt-ocr'
+import { scanReceiptWithGemini } from '@/lib/receipt-cloud-client'
+vi.mock('@/lib/receipt-cloud-client', () => ({ scanReceiptWithGemini: vi.fn() }))
 vi.mock('@/lib/receipt-ocr', () => ({ prepareReceiptPhoto: vi.fn(), scanReceiptPhotos: vi.fn() }))
 beforeEach(() => { vi.clearAllMocks() })
 describe('scanner errors and cancellation', () => {
+  it('defaults to Tesseract and sends nothing until Gemini is selected and Scan tapped', async () => {
+    const ready = vi.fn()
+    vi.mocked(scanReceiptWithGemini).mockResolvedValue({ store: 'Lidl', date: '', currency: 'EUR', items: [], subtotal: 0, tax: 0, grandTotal: 0 })
+    render(<ReceiptScannerSheet initialPhotos={['photo']} onClose={vi.fn()} onResultReady={ready} />)
+    expect(screen.getByRole('radio', { name: 'On-device · Tesseract' })).toBeChecked()
+    expect(scanReceiptWithGemini).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('radio', { name: 'Cloud · Gemini' }))
+    expect(screen.getByText(/selected photos will be sent to Google/)).toBeVisible()
+    expect(scanReceiptWithGemini).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Scan with Gemini' }))
+    await waitFor(() => expect(ready).toHaveBeenCalledTimes(1))
+    expect(scanReceiptWithGemini).toHaveBeenCalledWith(['photo'], expect.any(AbortSignal), expect.any(Function))
+    expect(scanReceiptPhotos).not.toHaveBeenCalled()
+  })
+  it('keeps photos after quota failure and offers on-device scanning without a new upload', async () => {
+    vi.mocked(scanReceiptWithGemini).mockRejectedValue(new Error('Free quota exhausted'))
+    render(<ReceiptScannerSheet initialPhotos={['photo']} onClose={vi.fn()} onResultReady={vi.fn()} />)
+    fireEvent.click(screen.getByRole('radio', { name: 'Cloud · Gemini' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Scan with Gemini' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Free quota exhausted'))
+    expect(screen.getByRole('img', { name: 'Receipt photo 1' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Use on-device scanning with these photos' }))
+    expect(screen.getByRole('radio', { name: 'On-device · Tesseract' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Read receipt' })).toBeEnabled()
+  })
   it('shows unsupported image errors and permits manual entry', async () => {
     vi.mocked(prepareReceiptPhoto).mockRejectedValue(new Error('Use JPEG/PNG'))
     const ready = vi.fn()
